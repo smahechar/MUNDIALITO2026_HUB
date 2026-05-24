@@ -1,0 +1,28 @@
+# Variables de entorno
+.env
+.env.local
+backend/.env
+
+# Python
+__pycache__/
+*.py[cod]
+backend/venv/
+venv/
+
+# Node
+node_modules/
+dist/
+.vite/
+
+# Archivos temporales / pesados
+design_extracted/
+*.tar
+*.zip
+*.mp4
+
+# Sistema / IDE
+.vscode/
+.idea/
+.DS_Store
+Thumbs.db
+desktop.ini
