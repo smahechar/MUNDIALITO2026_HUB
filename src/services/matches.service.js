@@ -27,4 +27,22 @@ export const matchesService = {
       return EMPTY_DETAIL
     }
   },
+
+  async getScorers() {
+    try {
+      return await apiFetch('/matches/scorers')
+    } catch (err) {
+      console.warn('No se pudo cargar goleadores desde backend:', err)
+      return []
+    }
+  },
+
+  async getStandings() {
+    try {
+      return await apiFetch('/matches/standings')
+    } catch (err) {
+      console.warn('No se pudo cargar tabla de posiciones desde backend:', err)
+      return []
+    }
+  },
 }
