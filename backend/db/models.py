@@ -220,7 +220,45 @@ class Trade(Base):
     proposer = relationship("User", foreign_keys=[proposer_id], back_populates="trades_sent")
     receiver = relationship("User", foreign_keys=[receiver_id], back_populates="trades_recv")
 
+class AlbumTradeListing(Base):
+    __tablename__ = "album_trade_listings"
 
+    id = Column(String(36), primary_key=True, default=_uuid)
+    owner_id = Column(String(64), ForeignKey("users.id", ondelete="CASCADE"), nullable=False)
+    offered_sticker_id = Column(String(10), ForeignKey("stickers.id"), nullable=False)
+    requested_sticker_id = Column(String(10), ForeignKey("stickers.id"), nullable=True)
+
+    title = Column(String(160), nullable=True)
+    note = Column(Text, nullable=True)
+
+    status = Column(String(30), default="open", nullable=False)
+    created_at = Column(DateTime(timezone=True), default=_now)
+    updated_at = Column(DateTime(timezone=True), default=_now, onupdate=_now)
+    completed_at = Column(DateTime(timezone=True), nullable=True)
+
+    owner = relationship("User", foreign_keys=[owner_id])
+    offered_sticker = relationship("Sticker", foreign_keys=[offered_sticker_id])
+    requested_sticker = relationship("Sticker", foreign_keys=[requested_sticker_id])
+
+
+class AlbumTradeOffer(Base):
+    __tablename__ = "album_trade_offers"
+
+    id = Column(String(36), primary_key=True, default=_uuid)
+    listing_id = Column(String(36), ForeignKey("album_trade_listings.id", ondelete="CASCADE"), nullable=False)
+    bidder_id = Column(String(64), ForeignKey("users.id", ondelete="CASCADE"), nullable=False)
+    offered_sticker_id = Column(String(10), ForeignKey("stickers.id"), nullable=False)
+
+    message = Column(Text, nullable=True)
+    status = Column(String(30), default="pending", nullable=False)
+
+    created_at = Column(DateTime(timezone=True), default=_now)
+    updated_at = Column(DateTime(timezone=True), default=_now, onupdate=_now)
+    confirmed_at = Column(DateTime(timezone=True), nullable=True)
+
+    listing = relationship("AlbumTradeListing")
+    bidder = relationship("User", foreign_keys=[bidder_id])
+    offered_sticker = relationship("Sticker", foreign_keys=[offered_sticker_id])
 # ─── Tickets ──────────────────────────────────────────────────────────────────
 
 class Ticket(Base):

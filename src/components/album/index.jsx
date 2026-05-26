@@ -1,4 +1,4 @@
-import { useMemo } from "react"
+import { useEffect, useMemo, useState } from "react"
 import { Btn, Eyebrow } from "@/components/shared/atoms"
 
 const cardBase = {
@@ -537,83 +537,221 @@ export function PackOpenModal({ pack, stickers = [], onClose }) {
   )
 }
 
-export function ActiveTradesSection({ trades = [], duplicates = [] }) {
+export function ActiveTradesSection({
+  trades = [],
+  myMarket = { listings: [], offers: [] },
+  duplicates = [],
+  loading = false,
+  onCreate,
+  onRefresh,
+  onAcceptOffer,
+  onConfirmOffer,
+}) {
   const visibleDupes = useMemo(() => duplicates.slice(0, 6), [duplicates])
 
   return (
     <section className="gc-card" style={{ ...cardBase, padding: 28 }}>
-      <Eyebrow>INTERCAMBIOS</Eyebrow>
-
-      <h2
-        style={{
-          fontFamily: "var(--f-display)",
-          fontSize: 42,
-          margin: "6px 0 10px",
-        }}
-      >
-        Repetidas disponibles
-      </h2>
-
-      <p style={{ opacity: 0.75, marginTop: 0 }}>
-        Usa tus repetidas para futuros intercambios.
-      </p>
-
-      {visibleDupes.length === 0 ? (
-        <div
-          style={{
-            marginTop: 18,
-            padding: 18,
-            borderRadius: 18,
-            background: "rgba(255,255,255,.045)",
-            border: "1px solid rgba(255,255,255,.10)",
-          }}
-        >
-          Todavía no tienes repetidas.
+      <div className="gc-row" style={{ justifyContent: "space-between", alignItems: "center", gap: 16 }}>
+        <div>
+          <Eyebrow>CASA DE INTERCAMBIOS</Eyebrow>
+          <h2
+            style={{
+              fontFamily: "var(--f-display)",
+              fontSize: 42,
+              margin: "6px 0 10px",
+            }}
+          >
+            Mercado de láminas
+          </h2>
+          <p style={{ opacity: 0.75, marginTop: 0 }}>
+            Publica una repetida, recibe ofertas, deja el trato en standby y confirma el intercambio.
+          </p>
         </div>
-      ) : (
-        <div
-          style={{
-            display: "grid",
-            gridTemplateColumns: "repeat(auto-fill, minmax(110px, 1fr))",
-            gap: 16,
-            marginTop: 22,
-          }}
-        >
-          {visibleDupes.map((s) => (
-            <StickerCard
-              key={s.id}
-              sticker={s}
-              owned
-              dupe
-              count={s.count}
-              size="sm"
-            />
-          ))}
-        </div>
-      )}
 
-      {trades.length > 0 && (
-        <div style={{ marginTop: 22 }}>
-          {trades.map((t, i) => (
-            <div
-              key={t.id ?? i}
-              style={{
-                padding: 14,
-                borderRadius: 16,
-                background: "rgba(255,255,255,.045)",
-                marginTop: 10,
-              }}
-            >
-              Intercambio #{t.id ?? i + 1}
-            </div>
-          ))}
+        <div className="gc-row gc-gap-sm">
+          <Btn onClick={onRefresh}>Actualizar</Btn>
+          <Btn onClick={onCreate}>Publicar ficha</Btn>
         </div>
-      )}
+      </div>
+
+      <div style={{ marginTop: 22 }}>
+        <Eyebrow>Mis repetidas disponibles</Eyebrow>
+
+        {visibleDupes.length === 0 ? (
+          <div
+            style={{
+              marginTop: 18,
+              padding: 18,
+              borderRadius: 18,
+              background: "rgba(255,255,255,.045)",
+              border: "1px solid rgba(255,255,255,.10)",
+            }}
+          >
+            Todavía no tienes repetidas para publicar.
+          </div>
+        ) : (
+          <div
+            style={{
+              display: "grid",
+              gridTemplateColumns: "repeat(auto-fill, minmax(110px, 1fr))",
+              gap: 16,
+              marginTop: 22,
+            }}
+          >
+            {visibleDupes.map((s) => (
+              <StickerCard
+                key={s.id}
+                sticker={s}
+                owned
+                dupe
+                count={s.count}
+                size="sm"
+              />
+            ))}
+          </div>
+        )}
+      </div>
+
+      <div style={{ marginTop: 30 }}>
+        <Eyebrow>Publicaciones abiertas</Eyebrow>
+
+        {loading ? (
+          <p style={{ opacity: 0.7 }}>Cargando mercado…</p>
+        ) : trades.length === 0 ? (
+          <p style={{ opacity: 0.7 }}>No hay publicaciones abiertas todavía.</p>
+        ) : (
+          <div style={{ display: "grid", gap: 12, marginTop: 14 }}>
+            {trades.map((listing) => (
+              <div
+                key={listing.id}
+                style={{
+                  padding: 16,
+                  borderRadius: 18,
+                  background: "rgba(255,255,255,.045)",
+                  border: "1px solid rgba(255,255,255,.10)",
+                }}
+              >
+                <div className="gc-row" style={{ justifyContent: "space-between", gap: 16, alignItems: "center" }}>
+                  <div>
+                    <strong>{listing.title || "Intercambio"}</strong>
+                    <div style={{ fontSize: 13, opacity: 0.75, marginTop: 4 }}>
+                      Ofrece: {listing.offeredSticker?.name || listing.offeredStickerId}
+                      {" · "}
+                      Quiere: {listing.requestedSticker?.name || listing.requestedStickerId || "Escucha ofertas"}
+                    </div>
+                    <div style={{ fontSize: 12, opacity: 0.55, marginTop: 4 }}>
+                      Estado: {listing.status}
+                    </div>
+                  </div>
+                </div>
+              </div>
+            ))}
+          </div>
+        )}
+      </div>
+
+      <div style={{ marginTop: 30 }}>
+        <Eyebrow>Mis publicaciones</Eyebrow>
+
+        {(myMarket.listings || []).length === 0 ? (
+          <p style={{ opacity: 0.7 }}>Aún no has publicado fichas.</p>
+        ) : (
+          <div style={{ display: "grid", gap: 12, marginTop: 14 }}>
+            {myMarket.listings.map((listing) => (
+              <div
+                key={listing.id}
+                style={{
+                  padding: 16,
+                  borderRadius: 18,
+                  background: "rgba(255,255,255,.045)",
+                  border: "1px solid rgba(255,255,255,.10)",
+                }}
+              >
+                <strong>{listing.title || "Intercambio"}</strong>
+                <div style={{ fontSize: 13, opacity: 0.75, marginTop: 4 }}>
+                  {listing.offeredSticker?.name || listing.offeredStickerId}
+                  {" → "}
+                  {listing.requestedSticker?.name || listing.requestedStickerId || "cualquier oferta"}
+                </div>
+                <div style={{ fontSize: 12, opacity: 0.6, marginTop: 4 }}>
+                  Estado: {listing.status}
+                </div>
+              </div>
+            ))}
+          </div>
+        )}
+      </div>
+
+      <div style={{ marginTop: 30 }}>
+        <Eyebrow>Mis ofertas hechas</Eyebrow>
+
+        {(myMarket.offers || []).length === 0 ? (
+          <p style={{ opacity: 0.7 }}>Todavía no has hecho ofertas.</p>
+        ) : (
+          <div style={{ display: "grid", gap: 12, marginTop: 14 }}>
+            {myMarket.offers.map((offer) => (
+              <div
+                key={offer.id}
+                style={{
+                  padding: 16,
+                  borderRadius: 18,
+                  background: "rgba(255,255,255,.045)",
+                  border: "1px solid rgba(255,255,255,.10)",
+                }}
+              >
+                <div className="gc-row" style={{ justifyContent: "space-between", gap: 16, alignItems: "center" }}>
+                  <div>
+                    <strong>{offer.offeredSticker?.name || offer.offeredStickerId}</strong>
+                    <div style={{ fontSize: 12, opacity: 0.6, marginTop: 4 }}>
+                      Estado: {offer.status}
+                    </div>
+                  </div>
+
+                  {offer.status === "standby" && (
+                    <Btn onClick={() => onConfirmOffer?.(offer.id)}>
+                      Confirmar intercambio
+                    </Btn>
+                  )}
+                </div>
+              </div>
+            ))}
+          </div>
+        )}
+      </div>
     </section>
   )
 }
 
-export function TradeModal({ duplicates = [], onClose }) {
+export function TradeModal({ duplicates = [], stickers = [], onClose, onCreate }) {
+  const [offeredStickerId, setOfferedStickerId] = useState(duplicates[0]?.id || "")
+  const [requestedStickerId, setRequestedStickerId] = useState("")
+  const [title, setTitle] = useState("")
+  const [note, setNote] = useState("")
+  const [saving, setSaving] = useState(false)
+
+  async function handleSubmit() {
+    if (!offeredStickerId) {
+      alert("Selecciona la ficha repetida que vas a publicar")
+      return
+    }
+
+    try {
+      setSaving(true)
+
+      await onCreate?.({
+        offeredStickerId,
+        requestedStickerId: requestedStickerId || null,
+        title: title || "Intercambio de lámina",
+        note: note || null,
+      })
+    } catch (err) {
+      console.error("Error creando publicación:", err)
+      alert(err.message || "No se pudo crear la publicación")
+    } finally {
+      setSaving(false)
+    }
+  }
+
   return (
     <div
       style={{
@@ -632,12 +770,13 @@ export function TradeModal({ duplicates = [], onClose }) {
         className="gc-card"
         style={{
           ...cardBase,
-          width: "min(720px, 96vw)",
+          width: "min(760px, 96vw)",
           padding: 28,
         }}
         onClick={(e) => e.stopPropagation()}
       >
-        <Eyebrow>INTERCAMBIO</Eyebrow>
+        <Eyebrow>CASA DE INTERCAMBIO</Eyebrow>
+
         <h2
           style={{
             fontFamily: "var(--f-display)",
@@ -645,14 +784,76 @@ export function TradeModal({ duplicates = [], onClose }) {
             margin: "8px 0 16px",
           }}
         >
-          Crear intercambio
+          Publicar ficha
         </h2>
 
         <p style={{ opacity: 0.75 }}>
-          Tienes {duplicates.length} láminas repetidas disponibles.
+          Publica una lámina repetida y pide otra a cambio. Otro usuario podrá ofertar y luego confirmar el intercambio.
         </p>
 
-        <Btn onClick={onClose}>Cerrar</Btn>
+        <div className="gc-col gc-gap-md" style={{ marginTop: 18 }}>
+          <label>
+            <Eyebrow>Ficha que ofreces</Eyebrow>
+            <select
+              className="gc-input"
+              value={offeredStickerId}
+              onChange={(e) => setOfferedStickerId(e.target.value)}
+              style={{ width: "100%", marginTop: 8 }}
+            >
+              {duplicates.map((s) => (
+                <option key={s.id} value={s.id}>
+                  {s.id} · {s.name} · tienes {s.count}
+                </option>
+              ))}
+            </select>
+          </label>
+
+          <label>
+            <Eyebrow>Ficha que quieres recibir</Eyebrow>
+            <select
+              className="gc-input"
+              value={requestedStickerId}
+              onChange={(e) => setRequestedStickerId(e.target.value)}
+              style={{ width: "100%", marginTop: 8 }}
+            >
+              <option value="">Escucho ofertas</option>
+              {stickers.map((s) => (
+                <option key={s.id} value={s.id}>
+                  {s.id} · {s.name}
+                </option>
+              ))}
+            </select>
+          </label>
+
+          <label>
+            <Eyebrow>Título</Eyebrow>
+            <input
+              className="gc-input"
+              value={title}
+              onChange={(e) => setTitle(e.target.value)}
+              placeholder="Cambio repetida por una que me falta"
+              style={{ width: "100%", marginTop: 8 }}
+            />
+          </label>
+
+          <label>
+            <Eyebrow>Nota</Eyebrow>
+            <textarea
+              className="gc-input"
+              value={note}
+              onChange={(e) => setNote(e.target.value)}
+              placeholder="Ej: prefiero jugadores de Colombia o Argentina"
+              style={{ width: "100%", marginTop: 8, minHeight: 90 }}
+            />
+          </label>
+        </div>
+
+        <div className="gc-row gc-gap-sm" style={{ justifyContent: "flex-end", marginTop: 24 }}>
+          <Btn onClick={onClose}>Cancelar</Btn>
+          <Btn onClick={handleSubmit} disabled={saving}>
+            {saving ? "Publicando..." : "Publicar"}
+          </Btn>
+        </div>
       </div>
     </div>
   )

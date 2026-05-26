@@ -17,6 +17,7 @@ export default function AlbumPage() {
   const [album, setAlbum] = useState(null)
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState("")
+
   const [openingPack, setOpeningPack] = useState(false)
   const [lastPack, setLastPack] = useState(null)
 
@@ -24,10 +25,18 @@ export default function AlbumPage() {
   const [packModalOpen, setPackModalOpen] = useState(false)
   const [tradeModalOpen, setTradeModalOpen] = useState(false)
 
+  const [market, setMarket] = useState([])
+  const [myMarket, setMyMarket] = useState({
+    listings: [],
+    offers: [],
+  })
+  const [marketLoading, setMarketLoading] = useState(false)
+
   async function loadAlbum() {
     try {
       setLoading(true)
       setError("")
+
       const data = await albumService.getAlbum()
       setAlbum(data)
     } catch (err) {
@@ -35,6 +44,24 @@ export default function AlbumPage() {
       setError(err.message || "No se pudo cargar el álbum")
     } finally {
       setLoading(false)
+    }
+  }
+
+  async function loadMarket() {
+    try {
+      setMarketLoading(true)
+
+      const [marketData, myMarketData] = await Promise.all([
+        albumService.getMarket(),
+        albumService.getMyMarket(),
+      ])
+
+      setMarket(Array.isArray(marketData) ? marketData : [])
+      setMyMarket(myMarketData || { listings: [], offers: [] })
+    } catch (err) {
+      console.error("Error cargando mercado:", err)
+    } finally {
+      setMarketLoading(false)
     }
   }
 
@@ -48,6 +75,7 @@ export default function AlbumPage() {
       setPackModalOpen(true)
 
       await loadAlbum()
+      await loadMarket()
     } catch (err) {
       console.error("Error abriendo sobre:", err)
       setError(err.message || "No se pudo abrir el sobre")
@@ -58,6 +86,7 @@ export default function AlbumPage() {
 
   useEffect(() => {
     loadAlbum()
+    loadMarket()
   }, [])
 
   const stickers = Array.isArray(album?.stickers) ? album.stickers : []
@@ -92,7 +121,13 @@ export default function AlbumPage() {
       <PageShell>
         <div className="gc-card" style={{ padding: 28 }}>
           <Eyebrow>ÁLBUM</Eyebrow>
-          <h1 style={{ fontFamily: "var(--f-display)", fontSize: 54, margin: 0 }}>
+          <h1
+            style={{
+              fontFamily: "var(--f-display)",
+              fontSize: 54,
+              margin: 0,
+            }}
+          >
             Cargando álbum...
           </h1>
           <p>Consultando datos desde la base de datos.</p>
@@ -106,7 +141,13 @@ export default function AlbumPage() {
       <PageShell>
         <div className="gc-card" style={{ padding: 28 }}>
           <Eyebrow>ERROR</Eyebrow>
-          <h1 style={{ fontFamily: "var(--f-display)", fontSize: 54, margin: 0 }}>
+          <h1
+            style={{
+              fontFamily: "var(--f-display)",
+              fontSize: 54,
+              margin: 0,
+            }}
+          >
             No se pudo cargar el álbum
           </h1>
           <p>{error}</p>
@@ -125,11 +166,19 @@ export default function AlbumPage() {
         <section className="gc-card" style={{ padding: 28 }}>
           <Eyebrow>ÁLBUM OFICIAL</Eyebrow>
 
-          <h1 style={{ fontFamily: "var(--f-display)", fontSize: 64, margin: 0 }}>
+          <h1
+            style={{
+              fontFamily: "var(--f-display)",
+              fontSize: 64,
+              margin: 0,
+            }}
+          >
             Álbum
           </h1>
 
-          <p>Progreso real del servidor: {albumOwned}/{albumTotal} láminas.</p>
+          <p>
+            Progreso real del servidor: {albumOwned}/{albumTotal} láminas.
+          </p>
 
           <AlbumProgressBar
             owned={albumOwned}
@@ -140,7 +189,13 @@ export default function AlbumPage() {
             value={albumPct}
           />
 
-          <div className="gc-row gc-gap-md" style={{ marginTop: 18, flexWrap: "wrap" }}>
+          <div
+            className="gc-row gc-gap-md"
+            style={{
+              marginTop: 18,
+              flexWrap: "wrap",
+            }}
+          >
             <div className="gc-card" style={{ padding: 16 }}>
               <Eyebrow>Total</Eyebrow>
               <strong>{albumTotal}</strong>
@@ -208,7 +263,13 @@ export default function AlbumPage() {
             }}
           >
             {stickers.map((sticker) => (
-              <div key={sticker.id} style={{ display: "flex", justifyContent: "center" }}>
+              <div
+                key={sticker.id}
+                style={{
+                  display: "flex",
+                  justifyContent: "center",
+                }}
+              >
                 <StickerCard
                   sticker={sticker}
                   owned={isOwnedReal(sticker.id)}
@@ -220,7 +281,23 @@ export default function AlbumPage() {
           </div>
         </section>
 
-        <ActiveTradesSection trades={[]} duplicates={dupeStickers} />
+        <ActiveTradesSection
+          trades={market}
+          myMarket={myMarket}
+          duplicates={dupeStickers}
+          loading={marketLoading}
+          onCreate={() => setTradeModalOpen(true)}
+          onRefresh={loadMarket}
+          onAcceptOffer={async (offerId) => {
+            await albumService.acceptOffer(offerId)
+            await loadMarket()
+          }}
+          onConfirmOffer={async (offerId) => {
+            await albumService.confirmOffer(offerId)
+            await loadAlbum()
+            await loadMarket()
+          }}
+        />
       </div>
 
       {selectedNation && (
@@ -244,7 +321,13 @@ export default function AlbumPage() {
       {tradeModalOpen && (
         <TradeModal
           duplicates={dupeStickers}
+          stickers={stickers}
           onClose={() => setTradeModalOpen(false)}
+          onCreate={async (payload) => {
+            await albumService.createListing(payload)
+            setTradeModalOpen(false)
+            await loadMarket()
+          }}
         />
       )}
     </PageShell>
