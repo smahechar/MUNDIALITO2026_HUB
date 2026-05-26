@@ -123,15 +123,14 @@ def get_pool_members(pool_id: str) -> list:
 
 
 def get_discover_pools() -> list:
-    # Mezcla pollas públicas de la BD con las estáticas
     with SessionLocal() as db:
-        public_pools = db.query(Pool).filter(Pool.is_public == True).all()
-        db_discover = [_pool_to_dict(p) for p in public_pools]
+        public_pools = (
+            db.query(Pool)
+            .filter(Pool.is_public == True)
+            .all()
+        )
 
-    # Agregar estáticas que no estén ya en BD
-    db_codes = {p["code"] for p in db_discover}
-    extras = [d for d in _DISCOVER_STATIC if d["code"] not in db_codes]
-    return db_discover + extras
+        return [_pool_to_dict(p) for p in public_pools]
 
 
 def get_scoring_rules() -> list:

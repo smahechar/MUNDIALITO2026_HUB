@@ -91,6 +91,11 @@ class Match(Base):
     lineup_away = Column(JSON, default=dict)
     h2h         = Column(JSON, default=dict)
 
+    # Ingesta externa — última sincronización con el proveedor
+    last_synced_at  = Column(DateTime(timezone=True), nullable=True)
+    data_source     = Column(String(40), default="seed", nullable=False)
+    # "seed" | "mock" | "football-data.org" | "api-football" | "wiremock" | "admin"
+
     # Relaciones
     predictions = relationship("Prediction", back_populates="match", cascade="all, delete-orphan")
     tickets     = relationship("Ticket", back_populates="match")
@@ -243,6 +248,33 @@ class Ticket(Base):
                            order_by="TicketEvent.at")
 
 
+class PaymentRecord(Base):
+    """
+    Cada intento de pago contra el adaptador (mock o Stripe test) queda registrado.
+    Sirve para evidencia operativa: qué tarjeta (solo last4), monto, status, código de error.
+    Un ticket puede tener N PaymentRecord (varios intentos antes de éxito).
+    """
+    __tablename__ = "payment_records"
+
+    id              = Column(String(40), primary_key=True)   # "pay_<hex>"
+    ticket_id       = Column(String(20), ForeignKey("tickets.id", ondelete="CASCADE"), nullable=False, index=True)
+    user_id         = Column(String(36), ForeignKey("users.id", ondelete="CASCADE"), nullable=False, index=True)
+    provider        = Column(String(20), default="mock", nullable=False)   # "mock" | "stripe"
+    status          = Column(String(20), default="pending", nullable=False)  # "pending" | "succeeded" | "failed"
+    code            = Column(String(40), nullable=True)   # "card_declined" | "expired_card" | "insufficient_funds" | "ok"
+    amount_usd      = Column(Float, nullable=False)
+    currency        = Column(String(3), default="USD")
+    card_last4      = Column(String(4), nullable=True)
+    card_brand      = Column(String(20), nullable=True)
+    created_at      = Column(DateTime(timezone=True), default=_now, nullable=False)
+    correlation_id  = Column(String(60), nullable=True, index=True)
+    provider_ref    = Column(String(80), nullable=True)   # id externo (Stripe pi_…)
+    failure_reason  = Column(Text, nullable=True)
+
+    ticket = relationship("Ticket")
+    user   = relationship("User")
+
+
 class TicketEvent(Base):
     """Log de auditoría por ticket — trazabilidad de cada transición de estado."""
     __tablename__ = "ticket_events"
@@ -304,6 +336,55 @@ class GroupActivity(Base):
     created_at = Column(DateTime(timezone=True), default=_now)
 
     group = relationship("Group", back_populates="activities")
+
+
+# ─── Notifications ────────────────────────────────────────────────────────────
+
+class Notification(Base):
+    """
+    Notificación dirigida a un usuario.
+    Cada notificación queda persistida para evidencia operativa:
+    qué se envió, a quién, cuándo, por qué medio y bajo qué evento.
+    """
+    __tablename__ = "notifications"
+
+    id             = Column(String(36), primary_key=True, default=_uuid)
+    user_id        = Column(String(36), ForeignKey("users.id", ondelete="CASCADE"), nullable=False, index=True)
+    category       = Column(String(30), nullable=False, index=True)
+    # "goal" | "match_change" | "ticket" | "transfer" | "refund" | "pool" | "album" | "broadcast" | "system"
+    channel        = Column(String(20), default="in_app", nullable=False)
+    # "in_app" | "email" | "push" — registro de medio elegido
+    title          = Column(String(200), nullable=False)
+    body           = Column(Text, default="")
+    link           = Column(String(300), nullable=True)
+    status         = Column(String(20), default="sent", nullable=False)
+    # "queued" | "sent" | "delivered" | "failed"
+    read           = Column(Boolean, default=False, nullable=False)
+    created_at     = Column(DateTime(timezone=True), default=_now, nullable=False, index=True)
+    read_at        = Column(DateTime(timezone=True), nullable=True)
+    correlation_id = Column(String(60), nullable=True, index=True)
+    meta           = Column(JSON, default=dict)
+
+    user = relationship("User")
+
+
+class NotificationPreference(Base):
+    """
+    Preferencias por usuario — espejo del toggle de la pantalla Perfil.
+    Si no existe registro, se asumen todos los toggles en True excepto marketing.
+    """
+    __tablename__ = "notification_preferences"
+
+    user_id          = Column(String(36), ForeignKey("users.id", ondelete="CASCADE"), primary_key=True)
+    goals_live       = Column(Boolean, default=True,  nullable=False)
+    my_predictions   = Column(Boolean, default=True,  nullable=False)
+    groups           = Column(Boolean, default=True,  nullable=False)
+    tickets          = Column(Boolean, default=True,  nullable=False)
+    reminders        = Column(Boolean, default=True,  nullable=False)
+    marketing        = Column(Boolean, default=False, nullable=False)
+    updated_at       = Column(DateTime(timezone=True), default=_now, onupdate=_now)
+
+    user = relationship("User")
 
 
 # ─── Audit Logs ───────────────────────────────────────────────────────────────

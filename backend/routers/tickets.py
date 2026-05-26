@@ -55,19 +55,26 @@ def reserve():
     body   = request.get_json() or {}
     ticket, error = reserve_ticket(g.current_user["email"], body)
     if error:
-        return jsonify({"detail": error}), 400
+        status = 429 if "limite" in error.lower() else \
+                 403 if "suspendida" in error.lower() else 400
+        return jsonify({"detail": error}), status
     return jsonify(ticket), 201
 
 
-# POST /api/v1/tickets/:id/confirm  (requiere token)
+# POST /api/v1/tickets/:id/confirm  (requiere token + tarjeta)
 @tickets_bp.post("/<ticket_id>/confirm")
 @require_auth
 def confirm(ticket_id):
-    ticket, error = confirm_ticket(ticket_id, g.current_user["email"])
+    body = request.get_json() or {}
+    card = body.get("card") or body  # acepta {card:{...}} o el shape plano
+    ticket, error = confirm_ticket(ticket_id, g.current_user["email"], card)
     if error:
-        status = 404 if "no encontrado" in error.lower() else \
-                 403 if "autorizado" in error.lower() else \
-                 410 if "expiró" in error.lower() else 409
+        el = error.lower()
+        status = 404 if "no encontrado" in el else \
+                 403 if "autorizado" in el else \
+                 410 if "expiró" in el or "expiro" in el else \
+                 402 if ("pago" in el and "rechazado" in el) else \
+                 400 if "tarjeta" in el else 409
         return jsonify({"detail": error}), status
     return jsonify(ticket)
 
@@ -82,8 +89,10 @@ def transfer(ticket_id):
         return jsonify({"detail": "El handle del destinatario es requerido"}), 400
     ticket, error = transfer_ticket(ticket_id, g.current_user["email"], handle)
     if error:
-        status = 404 if "no encontrado" in error.lower() else \
-                 403 if "autorizado" in error.lower() else 409
+        el = error.lower()
+        status = 429 if "limite" in el else \
+                 403 if ("autorizado" in el or "suspendida" in el) else \
+                 404 if ("no encontrado" in el or "no existe" in el) else 409
         return jsonify({"detail": error}), status
     return jsonify(ticket)
 
@@ -94,7 +103,9 @@ def transfer(ticket_id):
 def refund(ticket_id):
     ticket, error = refund_ticket(ticket_id, g.current_user["email"])
     if error:
-        status = 404 if "no encontrado" in error.lower() else \
-                 403 if "autorizado" in error.lower() else 409
+        el = error.lower()
+        status = 429 if "limite" in el else \
+                 403 if ("autorizado" in el or "suspendida" in el) else \
+                 404 if "no encontrado" in el else 409
         return jsonify({"detail": error}), status
     return jsonify(ticket)

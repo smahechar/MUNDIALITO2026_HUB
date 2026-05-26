@@ -18,10 +18,12 @@ import ForgotPassword   from '@/pages/Auth/ForgotPassword'
 // Pages — User
 import HomePage       from '@/pages/Home'
 import MatchesPage    from '@/pages/Matches'
+import AgendaPage     from '@/pages/Agenda'
 import PoolsPage      from '@/pages/Pools'
 import PoolDetailPage from '@/pages/Pools/PoolDetail'
 import PredictPage    from '@/pages/Pools/PredictPage'
 import NewPoolPage    from '@/pages/Pools/NewPoolPage'
+import Agenda from "./pages/Agenda";
 
 // Pages — Match detail
 import MatchDetailPage from '@/pages/MatchDetail'
@@ -74,6 +76,7 @@ function AppRoutes() {
       <Route element={<PrivateRoute />}>
         <Route element={<UserLayout />}>
           <Route path="/fixture"     element={<MatchesPage />} />
+          <Route path="/agenda"      element={<AgendaPage />} />
           <Route path="/pools"       element={<PoolsPage />} />
           <Route path="/match/:id"   element={<MatchDetailPage />} />
           <Route path="/pools/new"   element={<NewPoolPage />} />

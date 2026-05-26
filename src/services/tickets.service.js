@@ -33,10 +33,14 @@ export const ticketsService = {
     ? Promise.resolve({ id: `T-${Math.floor(7000 + Math.random() * 1999)}`, status: 'reserved' })
     : apiFetch('/tickets/reserve', { method: 'POST', body: JSON.stringify({ matchId, sectorId, qty }) }),
 
-  // Backend: POST /tickets/:id/confirm — triggers payment gateway webhook
-  confirmPayment: (ticketId) => ENV.USE_MOCKS
+  // Backend: POST /tickets/:id/confirm { card: { number, expMonth, expYear, cvc } }
+  // 200 OK → ticket confirmed. 402 → pago rechazado. 410 → reserva expirada.
+  confirmPayment: (ticketId, card) => ENV.USE_MOCKS
     ? Promise.resolve({ id: ticketId, status: 'confirmed' })
-    : apiFetch(`/tickets/${ticketId}/confirm`, { method: 'POST' }),
+    : apiFetch(`/tickets/${ticketId}/confirm`, {
+        method: 'POST',
+        body: JSON.stringify({ card }),
+      }),
 
   // Backend: POST /tickets/:id/transfer { handle } — invalidates original QR
   transfer: (ticketId, handle) => ENV.USE_MOCKS

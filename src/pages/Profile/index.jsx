@@ -1,10 +1,11 @@
-import { useState } from 'react'
+import { useEffect, useState } from 'react'
 import { useNavigate } from 'react-router-dom'
 import { PageShell, PageHeader, Floodlight, Footer } from '@/components/shared/Layout'
 import { Eyebrow, Btn, Flag } from '@/components/shared/atoms'
 import { ROUTES } from '@/config/routes'
 import { useAuth } from '@/context/AuthContext'
 import { TZ_OPTIONS } from '@/utils/tz'
+import { notificationsService } from '@/services/notifications.service'
 
 // Stats that come from a separate service — kept as mock until backend is wired
 const MOCK_STATS = {
@@ -22,6 +23,27 @@ const DEFAULT_NOTIFS = {
   entradas:        true,
   recordatorios:   true,
   marketing:       false,
+}
+
+// UI key (es-ES) → API key (camelCase backend)
+const NOTIF_KEY_MAP = {
+  golesEnVivo:     'goalsLive',
+  misPredicciones: 'myPredictions',
+  grupos:          'groups',
+  entradas:        'tickets',
+  recordatorios:   'reminders',
+  marketing:       'marketing',
+}
+
+function apiToUi(api) {
+  return {
+    golesEnVivo:     api.goalsLive     ?? true,
+    misPredicciones: api.myPredictions ?? true,
+    grupos:          api.groups        ?? true,
+    entradas:        api.tickets       ?? true,
+    recordatorios:   api.reminders     ?? true,
+    marketing:       api.marketing     ?? false,
+  }
 }
 
 // ─── Toggle switch ────────────────────────────────────────────────────────────
@@ -82,6 +104,26 @@ export default function ProfilePage() {
   const { user: authUser, logout, updateUser } = useAuth()
   const [tab,     setTab]     = useState('cuenta')
   const [notifs,  setNotifs]  = useState(DEFAULT_NOTIFS)
+
+  // Cargar preferencias reales al montar
+  useEffect(() => {
+    let alive = true
+    notificationsService.getPreferences()
+      .then(p => { if (alive) setNotifs(apiToUi(p)) })
+      .catch(() => {})
+    return () => { alive = false }
+  }, [])
+
+  async function toggleNotif(uiKey, value) {
+    setNotifs(ns => ({ ...ns, [uiKey]: value }))
+    try {
+      const patch = { [NOTIF_KEY_MAP[uiKey]]: value }
+      await notificationsService.updatePreferences(patch)
+    } catch {
+      // Revert si falla
+      setNotifs(ns => ({ ...ns, [uiKey]: !value }))
+    }
+  }
   const [editing, setEditing] = useState(false)
   const [saving,  setSaving]  = useState(false)
   const [saved,   setSaved]   = useState(false)
@@ -391,7 +433,7 @@ export default function ProfilePage() {
                   label={n.label}
                   desc={n.desc}
                   value={notifs[n.key]}
-                  onChange={v => setNotifs(ns => ({ ...ns, [n.key]: v }))}
+                  onChange={v => toggleNotif(n.key, v)}
                   last={i === NOTIF_ITEMS.length - 1}
                 />
               ))}

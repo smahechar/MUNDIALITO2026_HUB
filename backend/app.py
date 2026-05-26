@@ -23,6 +23,7 @@ from routers.album       import album_bp
 from routers.tickets     import tickets_bp
 from routers.groups      import groups_bp
 from routers.admin       import admin_bp
+from routers.notifications import notifications_bp
 
 # ─── Core ─────────────────────────────────────────────────────────────────────
 from core.logger import log, init_request_logging
@@ -66,6 +67,7 @@ def create_app() -> Flask:
     app.register_blueprint(tickets_bp)
     app.register_blueprint(groups_bp)
     app.register_blueprint(admin_bp)
+    app.register_blueprint(notifications_bp)
 
     # ── Health check ──────────────────────────────────────────────────────────
     @app.get("/")

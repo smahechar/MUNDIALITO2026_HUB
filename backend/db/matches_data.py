@@ -3,9 +3,11 @@ Capa de acceso a datos de partidos — PostgreSQL via SQLAlchemy.
 Reemplaza los dicts hardcodeados del archivo original.
 """
 
-from datetime import datetime, timezone
+from datetime import datetime, timezone, timedelta
 from db.database import SessionLocal
 from db.models import Match
+from db.matches_sync import freshness_of
+from core.config import PREDICTION_LOCK_MINUTES_BEFORE_KICKOFF
 
 # ─── Datos estáticos que no viven en BD ───────────────────────────────────────
 # Momentos y goleadores se mantienen aquí hasta tener tablas dedicadas.
@@ -89,19 +91,28 @@ _MATCH_DETAILS_STATIC: dict = {
 # ─── Conversión modelo → dict ─────────────────────────────────────────────────
 
 def _to_dict(m: Match) -> dict:
+    locks_at = (
+        m.kickoff - timedelta(minutes=PREDICTION_LOCK_MINUTES_BEFORE_KICKOFF)
+        if m.kickoff else None
+    )
     return {
-        "id":        m.id,
-        "home":      m.home,
-        "away":      m.away,
-        "group":     m.group_name,
-        "stadium":   m.stadium,
-        "city":      m.city,
-        "phase":     m.phase,
-        "status":    m.status,
-        "minute":    m.minute,
-        "homeScore": m.home_score,
-        "awayScore": m.away_score,
-        "kickoff":   m.kickoff.isoformat() if m.kickoff else None,
+        "id":             m.id,
+        "home":           m.home,
+        "away":           m.away,
+        "group":          m.group_name,
+        "stadium":        m.stadium,
+        "city":           m.city,
+        "phase":          m.phase,
+        "status":         m.status,
+        "minute":         m.minute,
+        "homeScore":      m.home_score,
+        "awayScore":      m.away_score,
+        "kickoff":        m.kickoff.isoformat()        if m.kickoff        else None,
+        "locksAt":        locks_at.isoformat()         if locks_at         else None,
+        # Ingesta externa — freshness para que la UI etiquete "actualización pendiente"
+        "lastSyncedAt":   m.last_synced_at.isoformat() if m.last_synced_at else None,
+        "dataSource":     m.data_source or "seed",
+        "dataFreshness":  freshness_of(m.last_synced_at, m.status),
     }
 
 

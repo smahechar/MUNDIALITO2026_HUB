@@ -12,6 +12,7 @@ from db.memory           import get_all_users, update_user_status
 from db.matches_data     import get_all_matches, update_match
 from db.admin_data       import get_alerts, patch_alert, broadcast_alert
 from db.predictions_data import score_predictions_for_match
+from db.matches_sync     import sync_from_provider
 
 admin_bp = Blueprint("admin", __name__, url_prefix="/api/v1/admin")
 
@@ -82,6 +83,15 @@ def set_user_status(user_id):
 def list_matches():
     status = request.args.get("status")
     return jsonify(get_all_matches(status=status))
+
+
+@admin_bp.post("/matches/sync")
+@require_admin
+def matches_sync():
+    """Fuerza un refresh manual contra el provider externo. Idempotente."""
+    stats = sync_from_provider()
+    log.admin("matches_sync_manual", admin_email=g.current_user["email"], **stats)
+    return jsonify(stats)
 
 
 @admin_bp.patch("/matches/<match_id>")

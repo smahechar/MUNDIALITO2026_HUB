@@ -5,6 +5,20 @@ import { matchDays, stadiums } from '@/mocks/data/matches'
 import { Flag, Eyebrow, Pill } from '@/components/shared/atoms'
 import { Floodlight } from '@/components/shared/Layout'
 
+export function FreshnessBadge({ source, lastSyncedAt }) {
+  const isExternal = source && source !== "seed";
+
+  return (
+    <span className={`inline-flex items-center rounded-full px-2 py-1 text-xs font-medium ${
+      isExternal
+        ? "bg-green-100 text-green-700"
+        : "bg-gray-100 text-gray-600"
+    }`}>
+      {isExternal ? "Actualizado" : "Base"}
+      {lastSyncedAt ? ` · ${new Date(lastSyncedAt).toLocaleString()}` : ""}
+    </span>
+  );
+}
 // ─── MatchCard · tarjeta de partido (cuadrada) ───────────────────────────────
 export function MatchCard({ match }) {
   const navigate = useNavigate()

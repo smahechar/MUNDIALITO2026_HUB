@@ -375,7 +375,7 @@ function DiscoveryPoolCard({ pool, onJoin }) {
     }}>
       <div className="gc-row" style={{ justifyContent:'space-between' }}>
         <Eyebrow>CODE · {pool.code}</Eyebrow>
-        <Pill>{pool.host}</Pill>
+        <Pill>{pool.hostType ?? pool.host}</Pill>
       </div>
       <h4 style={{ fontFamily:'var(--f-sub)', fontWeight:800, fontSize:22,
         margin:0, letterSpacing:'0.01em', textTransform:'uppercase', lineHeight:1.1,
@@ -510,13 +510,23 @@ export default function PoolsPage() {
       <div style={{ padding:'22px 56px 0', display:'grid', gridTemplateColumns:'1.5fr 1fr', gap:20 }}>
         <PointsTimelineChart timeline={timeline} />
         <div className="gc-col gc-gap-md">
-          <SpecialPickCard kind="champion"  pick={specialPicks.champion}  tone="ink" />
-          <SpecialPickCard kind="topScorer" pick={specialPicks.topScorer} />
+          {specialPicks?.champion && (
+            <SpecialPickCard kind="champion" pick={specialPicks.champion} tone="ink" />
+          )}
+
+          {specialPicks?.topScorer && (
+            <SpecialPickCard kind="topScorer" pick={specialPicks.topScorer} />
+          )}
         </div>
       </div>
       <div style={{ padding:'16px 56px 0', display:'grid', gridTemplateColumns:'1fr 1fr', gap:16 }}>
-        <SpecialPickCard kind="runnerUp"  pick={specialPicks.runnerUp} />
-        <SpecialPickCard kind="darkHorse" pick={specialPicks.darkHorse} />
+        {specialPicks?.runnerUp && (
+          <SpecialPickCard kind="runnerUp" pick={specialPicks.runnerUp} />
+        )}
+
+        {specialPicks?.darkHorse && (
+          <SpecialPickCard kind="darkHorse" pick={specialPicks.darkHorse} />
+        )}
       </div>
 
       {/* ── 05 · HISTORIAL ── */}

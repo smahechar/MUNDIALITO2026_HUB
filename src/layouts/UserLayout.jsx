@@ -1,6 +1,7 @@
 import { useState } from 'react'
 import { Outlet, NavLink, useNavigate, useLocation } from 'react-router-dom'
 import { ROUTES } from '@/config/routes'
+import NotificationsCenter from '@/components/shared/NotificationsCenter'
 
 // ─── Sidebar nav items ────────────────────────────────────────────────────────
 const NAV_ITEMS = [
@@ -11,6 +12,16 @@ const NAV_ITEMS = [
       <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={2} className="w-5 h-5">
         <circle cx="12" cy="12" r="10" />
         <path d="M12 2a10 10 0 0 1 7.07 17.07M9 9l6 6M9 15l6-6" />
+      </svg>
+    ),
+  },
+  {
+    to:    ROUTES.AGENDA,
+    label: 'Agenda',
+    icon:  (
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={2} className="w-5 h-5">
+        <rect x="3" y="4" width="18" height="18" rx="2" />
+        <path d="M16 2v4M8 2v4M3 10h18M9 14h.01M13 14h.01M17 14h.01M9 18h.01M13 18h.01M17 18h.01" />
       </svg>
     ),
   },
@@ -242,6 +253,7 @@ function TopNav({ onMenuClick }) {
       {/* Right side */}
       <div className="flex items-center gap-3 shrink-0">
         <span className="gc-pill hidden sm:inline-flex">ES · COL</span>
+        <NotificationsCenter />
         <button
           className="gc-btn gc-btn-accent"
           style={{ padding: '8px 16px', fontSize: 11 }}

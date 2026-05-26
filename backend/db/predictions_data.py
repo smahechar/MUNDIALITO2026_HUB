@@ -3,9 +3,14 @@ Capa de acceso a predicciones — PostgreSQL via SQLAlchemy.
 Incluye el cálculo automático de puntos cuando un partido finaliza.
 """
 
-from datetime import datetime, timezone
+from datetime import datetime, timezone, timedelta
 from db.database import SessionLocal
 from db.models import Prediction, PoolMember, Match, User
+from db.notifications_data import notify_user
+from core.config import (
+    PREDICTION_LOCK_MINUTES_BEFORE_KICKOFF,
+    PREDICTION_REMINDER_MINUTES_BEFORE_KICKOFF,
+)
 
 # ─── Reglas de puntuación ─────────────────────────────────────────────────────
 PTS_EXACT  = 30   # marcador exacto
@@ -43,9 +48,31 @@ def _winner(h: int, a: int) -> str:
     return "draw"
 
 
+def compute_locks_at(kickoff: datetime | None) -> datetime | None:
+    """
+    Momento en que se cierran ediciones del pronóstico para un partido.
+    None si el partido no tiene kickoff definido.
+    """
+    if not kickoff:
+        return None
+    return kickoff - timedelta(minutes=PREDICTION_LOCK_MINUTES_BEFORE_KICKOFF)
+
+
+def is_locked(match: Match) -> bool:
+    """True si el match ya no acepta cambios de pronóstico."""
+    if not match:
+        return True
+    if match.status in ("live", "halftime", "final"):
+        return True
+    locks_at = compute_locks_at(match.kickoff)
+    if locks_at and datetime.now(timezone.utc) >= locks_at:
+        return True
+    return False
+
+
 # ─── Conversión ───────────────────────────────────────────────────────────────
 
-def _to_dict(p: Prediction) -> dict:
+def _to_dict(p: Prediction, locks_at: datetime | None = None) -> dict:
     return {
         "id":         p.id,
         "matchId":    p.match_id,
@@ -56,7 +83,7 @@ def _to_dict(p: Prediction) -> dict:
         "kind":       p.kind,
         "status":     p.status,
         "currentPts": p.pts or 0,
-        "locksAt":    None,
+        "locksAt":    locks_at.isoformat() if locks_at else None,
     }
 
 
@@ -68,14 +95,14 @@ def get_user_predictions(email: str) -> list:
         user = db.query(User).filter(User.email == email.lower()).first()
         if not user:
             return []
-        preds = (
-            db.query(Prediction)
-            .filter(Prediction.user_id == user.id)
+        rows = (
+            db.query(Prediction, Match)
             .join(Match, Prediction.match_id == Match.id)
+            .filter(Prediction.user_id == user.id)
             .order_by(Match.kickoff)
             .all()
         )
-        return [_to_dict(p) for p in preds]
+        return [_to_dict(p, compute_locks_at(m.kickoff)) for p, m in rows]
 
 
 def get_prediction(email: str, match_id: str) -> dict | None:
@@ -83,11 +110,16 @@ def get_prediction(email: str, match_id: str) -> dict | None:
         user = db.query(User).filter(User.email == email.lower()).first()
         if not user:
             return None
-        p = db.query(Prediction).filter(
-            Prediction.user_id == user.id,
-            Prediction.match_id == match_id,
-        ).first()
-        return _to_dict(p) if p else None
+        row = (
+            db.query(Prediction, Match)
+            .join(Match, Prediction.match_id == Match.id)
+            .filter(Prediction.user_id == user.id, Prediction.match_id == match_id)
+            .first()
+        )
+        if not row:
+            return None
+        p, m = row
+        return _to_dict(p, compute_locks_at(m.kickoff))
 
 
 def get_timeline(email: str) -> list:
@@ -135,14 +167,12 @@ def get_timeline(email: str) -> list:
 
 
 def get_special_picks(email: str) -> dict:
-    _DEFAULT = {
-        "champion":  {"nation": "ATL", "reward": 100, "status": "alive",   "note": "Si gana el torneo"},
-        "runnerUp":  {"nation": "BOR", "reward": 40,  "status": "alive",   "note": "Si llega a la final"},
-        "topScorer": {"player": "K. Olabode", "nation": "JOR", "goalsNow": 5, "reward": 50, "status": "leading", "note": "Liderando el botin"},
-        "darkHorse": {"nation": "JOR", "reward": 60,  "status": "alive",   "note": "Si llega a semifinal"},
+    return {
+        "champion": None,
+        "runnerUp": None,
+        "topScorer": None,
+        "darkHorse": None,
     }
-    return _DEFAULT
-
 
 def save_prediction(email: str, match_id: str, pick: dict) -> tuple[dict | None, str | None]:
     """
@@ -155,6 +185,13 @@ def save_prediction(email: str, match_id: str, pick: dict) -> tuple[dict | None,
             return None, "Partido no encontrado"
         if match.status in ("live", "halftime", "final"):
             return None, "El partido ya inicio, no se pueden registrar predicciones"
+
+        locks_at = compute_locks_at(match.kickoff)
+        if locks_at and datetime.now(timezone.utc) >= locks_at:
+            return None, (
+                f"Pronosticos cerrados — el cierre fue "
+                f"{PREDICTION_LOCK_MINUTES_BEFORE_KICKOFF} min antes del kickoff"
+            )
 
         user = db.query(User).filter(User.email == email.lower()).first()
         if not user:
@@ -192,7 +229,83 @@ def save_prediction(email: str, match_id: str, pick: dict) -> tuple[dict | None,
 
         db.commit()
         db.refresh(pred)
-        return _to_dict(pred), None
+        return _to_dict(pred, locks_at), None
+
+
+# ─── Recordatorio antes del cierre ────────────────────────────────────────────
+
+def send_lock_reminders() -> int:
+    """
+    Job periódico (APScheduler): para cada partido cuyo `locks_at` cae en la
+    ventana [now, now + REMINDER_WINDOW_MIN] y aún no envió recordatorio,
+    notifica a los usuarios que NO tienen pronóstico (categoria 'reminders').
+
+    Idempotente: usa una columna ad-hoc en `match.h2h` JSON o, más simple,
+    consulta `audit_logs` por correlation_id `lockrem_<match_id>`.
+    """
+    from db.models import AuditLog
+
+    now    = datetime.now(timezone.utc)
+    window = timedelta(minutes=PREDICTION_REMINDER_MINUTES_BEFORE_KICKOFF)
+    lock_d = timedelta(minutes=PREDICTION_LOCK_MINUTES_BEFORE_KICKOFF)
+
+    sent = 0
+    with SessionLocal() as db:
+        # Matches que aún no inician y cuyo lock cae en la ventana próxima.
+        upcoming = (
+            db.query(Match)
+            .filter(
+                Match.status == "upcoming",
+                Match.kickoff > now,
+                Match.kickoff - lock_d <= now + window,
+            )
+            .all()
+        )
+
+        for m in upcoming:
+            cid = f"lockrem_{m.id}"
+            already = db.query(AuditLog).filter(AuditLog.correlation_id == cid).first()
+            if already:
+                continue  # ya enviado para este match
+
+            # Usuarios miembros de cualquier polla que NO han pronosticado este match
+            members = db.query(PoolMember).all()
+            user_ids = {pm.user_id for pm in members}
+            predicted = {
+                p.user_id for p in db.query(Prediction)
+                .filter(Prediction.match_id == m.id)
+                .all()
+            }
+            targets = user_ids - predicted
+
+            locks_at = compute_locks_at(m.kickoff)
+            mins_left = max(1, int((locks_at - now).total_seconds() // 60))
+
+            for uid in targets:
+                notify_user(
+                    user_id=uid,
+                    category="pool",  # mapea a preferencia 'my_predictions'
+                    title=f"Cierra pronostico {m.home} vs {m.away}",
+                    body=(
+                        f"Quedan ~{mins_left} min para registrar tu pronostico. "
+                        f"Cierre {PREDICTION_LOCK_MINUTES_BEFORE_KICKOFF} min antes del kickoff."
+                    ),
+                    link=f"/predict/{m.id}",
+                    correlation_id=cid,
+                    meta={"matchId": m.id, "kickoff": m.kickoff.isoformat(), "minsLeft": mins_left},
+                )
+                sent += 1
+
+            # Marca el match como ya notificado (idempotencia)
+            db.add(AuditLog(
+                action="prediction.lock_reminder_dispatched",
+                level="INFO",
+                correlation_id=cid,
+                details={"matchId": m.id, "recipients": len(targets)},
+            ))
+            db.commit()
+
+    return sent
 
 
 # ─── Cálculo automático al finalizar partido ──────────────────────────────────
@@ -215,6 +328,7 @@ def score_predictions_for_match(match_id: str) -> int:
             Prediction.status != "scored",
         ).all()
 
+        notifs = []
         for pred in preds:
             kind, pts = _calc_kind_and_pts(
                 pred.home, pred.away,
@@ -239,5 +353,24 @@ def score_predictions_for_match(match_id: str) -> int:
                 elif kind in ("diff", "winner"):
                     pm.winner += 1
 
+            notifs.append((pred.user_id, kind, pts, pred.match_id))
+
         db.commit()
-        return len(preds)
+
+    # Notificar resultado por predicción (fuera de la sesión)
+    _LABEL = {
+        "exact":  "¡Marcador exacto!",
+        "diff":   "Diferencia acertada",
+        "winner": "Ganador acertado",
+        "miss":   "Predicción fallida",
+    }
+    for user_id, kind, pts, match_id in notifs:
+        notify_user(
+            user_id=user_id,
+            category="pool",
+            title=_LABEL.get(kind, "Resultado"),
+            body=f"{_LABEL.get(kind, 'Resultado')} en el partido {match_id} · +{pts} pts",
+            link=f"/match/{match_id}",
+            meta={"matchId": match_id, "kind": kind, "pts": pts},
+        )
+    return len(preds) if 'preds' in locals() else len(notifs)

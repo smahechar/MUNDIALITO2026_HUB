@@ -1,16 +1,17 @@
 import { useEffect, useMemo, useState } from "react"
 import { albumService } from "../../services/album.service"
-import { PageShell, Floodlight, Watermark, Band } from '@/components/shared/Layout'
-import { Eyebrow, Btn, SectionHead, useCountUp } from '@/components/shared/atoms'
+import { PageShell, Floodlight, Watermark } from "@/components/shared/Layout"
+import { Eyebrow, Btn, SectionHead } from "@/components/shared/atoms"
+
 import {
-  StickerCard,
   AlbumProgressBar,
   NationCard,
+  StickerCard,
+  ActiveTradesSection,
   NationModal,
   PackOpenModal,
   TradeModal,
-  ActiveTradesSection,
-} from '@/components/album'
+} from "@/components/album"
 
 export default function AlbumPage() {
   const [album, setAlbum] = useState(null)
@@ -30,6 +31,7 @@ export default function AlbumPage() {
       const data = await albumService.getAlbum()
       setAlbum(data)
     } catch (err) {
+      console.error("Error cargando álbum:", err)
       setError(err.message || "No se pudo cargar el álbum")
     } finally {
       setLoading(false)
@@ -47,6 +49,7 @@ export default function AlbumPage() {
 
       await loadAlbum()
     } catch (err) {
+      console.error("Error abriendo sobre:", err)
       setError(err.message || "No se pudo abrir el sobre")
     } finally {
       setOpeningPack(false)
@@ -67,27 +70,33 @@ export default function AlbumPage() {
   const albumMissing = Math.max(albumTotal - albumOwned, 0)
 
   const dupeStickers = useMemo(() => {
-    return stickers.filter(s => s.count > 1 || s.duplicate)
+    return stickers.filter((s) => Number(s.count ?? 0) > 1 || s.duplicate)
   }, [stickers])
 
   function getNationStickersReal(code) {
-    return stickers.filter(s => s.nation === code)
+    return stickers.filter((s) => s.nation === code)
   }
 
   function isOwnedReal(stickerId) {
-    const sticker = stickers.find(s => s.id === stickerId)
-    return Boolean(sticker?.owned || sticker?.count > 0)
+    const sticker = stickers.find((s) => s.id === stickerId)
+    return Boolean(sticker?.owned || Number(sticker?.count ?? 0) > 0)
   }
 
   function isDupeReal(stickerId) {
-    const sticker = stickers.find(s => s.id === stickerId)
-    return Boolean(sticker?.duplicate || sticker?.count > 1)
+    const sticker = stickers.find((s) => s.id === stickerId)
+    return Boolean(sticker?.duplicate || Number(sticker?.count ?? 0) > 1)
   }
 
   if (loading) {
     return (
       <PageShell>
-        <div className="gc-card">Cargando álbum...</div>
+        <div className="gc-card" style={{ padding: 28 }}>
+          <Eyebrow>ÁLBUM</Eyebrow>
+          <h1 style={{ fontFamily: "var(--f-display)", fontSize: 54, margin: 0 }}>
+            Cargando álbum...
+          </h1>
+          <p>Consultando datos desde la base de datos.</p>
+        </div>
       </PageShell>
     )
   }
@@ -95,8 +104,11 @@ export default function AlbumPage() {
   if (error) {
     return (
       <PageShell>
-        <div className="gc-card">
-          <h2>Error cargando álbum</h2>
+        <div className="gc-card" style={{ padding: 28 }}>
+          <Eyebrow>ERROR</Eyebrow>
+          <h1 style={{ fontFamily: "var(--f-display)", fontSize: 54, margin: 0 }}>
+            No se pudo cargar el álbum
+          </h1>
           <p>{error}</p>
           <Btn onClick={loadAlbum}>Reintentar</Btn>
         </div>
@@ -117,9 +129,7 @@ export default function AlbumPage() {
             Álbum
           </h1>
 
-          <p>
-            Progreso real del servidor: {albumOwned}/{albumTotal} láminas.
-          </p>
+          <p>Progreso real del servidor: {albumOwned}/{albumTotal} láminas.</p>
 
           <AlbumProgressBar
             owned={albumOwned}
@@ -171,10 +181,11 @@ export default function AlbumPage() {
               <NationCard
                 key={nation.code}
                 nation={nation}
+                stickers={getNationStickersReal(nation.code)}
                 owned={nation.owned}
                 total={nation.total}
                 pct={nation.percent}
-                onClick={() => setSelectedNation(nation)}
+                onExpand={() => setSelectedNation(nation)}
               />
             ))}
           </div>
@@ -197,13 +208,7 @@ export default function AlbumPage() {
             }}
           >
             {stickers.map((sticker) => (
-              <div
-                key={sticker.id}
-                style={{
-                  display: "flex",
-                  justifyContent: "center",
-                }}
-              >
+              <div key={sticker.id} style={{ display: "flex", justifyContent: "center" }}>
                 <StickerCard
                   sticker={sticker}
                   owned={isOwnedReal(sticker.id)}

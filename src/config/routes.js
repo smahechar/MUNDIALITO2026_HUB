@@ -7,6 +7,7 @@ export const ROUTES = {
 
   // User (authenticated)
   FIXTURE:      '/fixture',
+  AGENDA:       '/agenda',
   MATCH_DETAIL: '/match/:matchId',
   POOLS:        '/pools',
   POOL_DETAIL:  '/pools/:poolId',

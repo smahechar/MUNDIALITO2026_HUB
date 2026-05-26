@@ -23,5 +23,17 @@ export const matchesService = {
 
   getMoments:  () => ENV.USE_MOCKS ? Promise.resolve(moments)  : apiFetch('/matches/moments'),
   getScorers:  () => ENV.USE_MOCKS ? Promise.resolve(scorers)  : apiFetch('/matches/scorers'),
+
+  // Agenda personal: matches relevantes para el usuario (favoritas + ciudad).
+  // En mock devuelve los próximos 4 partidos como ejemplo.
+  getAgenda: ({ includeFinished = false } = {}) => ENV.USE_MOCKS
+    ? Promise.resolve(
+        matches
+          .filter(m => includeFinished || m.status !== 'final')
+          .slice(0, 4)
+          .map(m => ({ ...m, reasons: [{ kind: 'favorite_home', label: `Tu favorito: ${m.home}` }], priority: 100 }))
+      )
+    : apiFetch(`/matches/agenda${includeFinished ? '?includeFinished=1' : ''}`),
+
   nextKickoff: () => nextKickoff(),
 }

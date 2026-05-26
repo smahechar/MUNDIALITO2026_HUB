@@ -1,4 +1,5 @@
-from flask import Blueprint, jsonify, request
+from flask import Blueprint, jsonify, request, g
+from core.middleware import require_auth
 from db.matches_data import (
     get_all_matches,
     get_match_by_id,
@@ -7,6 +8,7 @@ from db.matches_data import (
     get_moments,
     get_scorers,
 )
+from db.agenda_data import get_agenda
 
 matches_bp = Blueprint("matches", __name__, url_prefix="/api/v1/matches")
 
@@ -22,6 +24,16 @@ def list_matches():
 @matches_bp.get("/live")
 def live_matches():
     return jsonify(get_live_matches())
+
+
+# GET /api/v1/matches/agenda  (requiere token)
+# Devuelve los partidos relevantes para el usuario (favoritas + ciudad) con
+# `reasons` para que la UI explique por qué cada partido está en su agenda.
+@matches_bp.get("/agenda")
+@require_auth
+def agenda():
+    include_finished = request.args.get("includeFinished") in ("1", "true", "yes")
+    return jsonify(get_agenda(g.current_user["email"], include_finished=include_finished))
 
 
 # GET /api/v1/matches/moments
