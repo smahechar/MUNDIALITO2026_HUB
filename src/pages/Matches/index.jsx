@@ -1,4 +1,4 @@
-import { useState, useMemo } from 'react'
+import { useState, useMemo, useEffect } from 'react'
 import { useNavigate } from 'react-router-dom'
 import { PageShell, PageHeader, Band, Floodlight } from '@/components/shared/Layout'
 import { Eyebrow, Pill, Btn, SectionHead } from '@/components/shared/atoms'
@@ -11,13 +11,59 @@ import { stadiums } from '@/mocks/data/matches'
 
 export default function MatchesPage() {
   const navigate = useNavigate()
-  const { matches: allMatches, isLoading } = useMatches()
+  const { matches: allMatches, isLoading, error } = useMatches()
 
-  const [md,      setMd]      = useState('MD2')
+  const [md,      setMd]      = useState('ALL')
   const [status,  setStatus]  = useState('all')
   const [group,   setGroup]   = useState('all')
   const [team,    setTeam]    = useState('all')
   const [stadium, setStadium] = useState('all')
+
+  const availableDays = useMemo(() => {
+  const buckets = {}
+
+  allMatches.forEach((m) => {
+    if (!m.kickoff) return
+
+    const key = String(m.kickoff).slice(0, 10)
+
+    if (!buckets[key]) {
+      buckets[key] = {
+        key,
+        count: 0,
+        hasLive: false,
+      }
+    }
+
+    buckets[key].count += 1
+
+    if (m.status === 'live' || m.status === 'halftime') {
+      buckets[key].hasLive = true
+    }
+  })
+
+  return Object.values(buckets)
+    .sort((a, b) => a.key.localeCompare(b.key))
+    .map((day, index) => {
+      const date = new Date(`${day.key}T12:00:00`)
+
+      return {
+        key: day.key,
+        label: `Match Day ${index + 1} · ${day.count}`,
+        date: date.toLocaleDateString('en-US', {
+          month: 'short',
+          day: '2-digit',
+        }),
+        group: day.hasLive ? 'live' : index === 0 ? 'next' : 'future',
+      }
+    })
+}, [allMatches])
+
+useEffect(() => {
+  if (md === 'ALL' && availableDays.length > 0) {
+    setMd(availableDays[0].key)
+  }
+}, [availableDays, md])
 
   // contadores para los chips
   const counts = useMemo(() => ({
@@ -33,13 +79,17 @@ export default function MatchesPage() {
 
   // lista filtrada
   const filtered = useMemo(() => allMatches.filter(m => {
-    if (md !== 'ALL' && !m.phase.includes(md)) return false
+    const matchDate = m.kickoff ? String(m.kickoff).slice(0, 10) : ''
+
+    if (md !== 'ALL' && matchDate !== md) return false
+
     if (status === 'live'     && !(m.status === 'live' || m.status === 'halftime')) return false
     if (status === 'upcoming' && m.status !== 'upcoming') return false
     if (status === 'final'    && m.status !== 'final')    return false
     if (group   !== 'all'     && m.group   !== group)     return false
     if (team    !== 'all'     && m.home    !== team && m.away !== team) return false
     if (stadium !== 'all'     && m.stadium !== stadium)   return false
+
     return true
   }), [md, status, group, team, stadium, allMatches])
 
@@ -98,7 +148,11 @@ export default function MatchesPage() {
 
       {/* ── BARRA DE JORNADAS (DateScrubber) ── */}
       <div style={{ padding: '0 56px' }}>
-        <DateScrubber active={md} onSelect={setMd} />
+        <DateScrubber
+          active={md}
+          onSelect={setMd}
+          days={availableDays}
+        />
       </div>
 
       {/* ── FILTROS: estado + grupo + selección + estadio ── */}
@@ -217,7 +271,15 @@ export default function MatchesPage() {
       {/* ── 02 · LISTA DE PARTIDOS POR FECHA ── */}
       <SectionHead
         num="02"
-        label={`↘ ${filtered.length} MATCHES · ${md === 'ALL' ? 'FULL CALENDAR' : md}`}
+        label={`↘ ${filtered.length} MATCHES · ${
+          md === 'ALL'
+            ? 'FULL CALENDAR'
+            : new Date(`${md}T12:00:00`).toLocaleDateString('es-CO', {
+                weekday: 'short',
+                month: 'short',
+                day: 'numeric',
+              })
+        }`}
         title="Matches"
         right={
           <span className="gc-mono gc-uppercase" style={{ fontSize: 11, color: 'var(--muted)', letterSpacing: '.12em' }}>
@@ -234,13 +296,25 @@ export default function MatchesPage() {
               Un momento…
             </h3>
           </div>
+        ) : error ? (
+          <div className="gc-card" style={{ padding: 56, textAlign: 'center' }}>
+            <Eyebrow>ERROR API</Eyebrow>
+            <h3 style={{ fontFamily: 'var(--f-display)', fontSize: 42, margin: '10px 0 8px', lineHeight: .9 }}>
+              No se pudieron cargar los partidos
+            </h3>
+            <p style={{ fontSize: 13, color: 'var(--ink-2)' }}>
+              {error.message}
+            </p>
+          </div>
         ) : grouped.length === 0 ? (
           <div className="gc-card" style={{ padding: 56, textAlign: 'center' }}>
             <Eyebrow>NO MATCHES</Eyebrow>
             <h3 style={{ fontFamily: 'var(--f-display)', fontSize: 42, margin: '10px 0 8px', lineHeight: .9 }}>
               No matches with those filters
             </h3>
-            <p style={{ fontSize: 13, color: 'var(--ink-2)' }}>Try clearing a filter or pick another match day.</p>
+            <p style={{ fontSize: 13, color: 'var(--ink-2)' }}>
+              Hay {allMatches.length} partidos cargados, pero los filtros actuales no muestran ninguno.
+            </p>
           </div>
         ) : (
           grouped.map(g => (

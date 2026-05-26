@@ -5,6 +5,19 @@ import { matchDays, stadiums } from '@/mocks/data/matches'
 import { Flag, Eyebrow, Pill } from '@/components/shared/atoms'
 import { Floodlight } from '@/components/shared/Layout'
 
+function getTeam(code) {
+  const safeCode = String(code ?? '').trim().toUpperCase()
+
+  return byCode[safeCode] ?? {
+    code: safeCode || 'TBD',
+    name: safeCode || 'Por definir',
+  }
+}
+
+function safeText(value, fallback = '—') {
+  return String(value ?? fallback)
+}
+
 export function FreshnessBadge({ source, lastSyncedAt }) {
   const isExternal = source && source !== "seed";
 
@@ -22,8 +35,8 @@ export function FreshnessBadge({ source, lastSyncedAt }) {
 // ─── MatchCard · tarjeta de partido (cuadrada) ───────────────────────────────
 export function MatchCard({ match }) {
   const navigate = useNavigate()
-  const home    = byCode[match.home]
-  const away    = byCode[match.away]
+  const home = getTeam(match.home)
+  const away = getTeam(match.away)
   const isLive  = match.status === 'live' || match.status === 'halftime'
   const isFinal = match.status === 'final'
 
@@ -75,10 +88,12 @@ export function MatchCard({ match }) {
 
 // ─── MatchRow · fila horizontal estilo broadcast (lista de fixture) ──────────
 export function MatchRow({ match, onClick }) {
-  const home    = byCode[match.home]
-  const away    = byCode[match.away]
-  const isLive  = match.status === 'live' || match.status === 'halftime'
+  const home = getTeam(match.home)
+  const away = getTeam(match.away)
+  const isLive = match.status === 'live' || match.status === 'halftime'
   const isFinal = match.status === 'final'
+
+  
 
   return (
     <div
@@ -138,12 +153,12 @@ export function MatchRow({ match, onClick }) {
       {/* estadio */}
       <div className="gc-col" style={{ minWidth: 0 }}>
         <span className="gc-mono gc-truncate" style={{ fontSize: 12, fontWeight: 600, letterSpacing: '.04em' }}>{match.stadium}</span>
-        <span className="gc-mono" style={{ fontSize: 10, color: 'var(--muted)', letterSpacing: '.08em' }}>{match.city.toUpperCase()}</span>
+        <span className="gc-mono" style={{ fontSize: 10, color: 'var(--muted)', letterSpacing: '.08em' }}>{safeText(match.city).toUpperCase()}</span>
       </div>
 
       {/* fase */}
       <span className="gc-mono gc-truncate" style={{ fontSize: 11, color: 'var(--muted)', letterSpacing: '.06em', textTransform: 'uppercase', textAlign: 'right' }}>
-        {match.phase.split('·').pop().trim()}
+        {safeText(match.phase).split('·').pop().trim()}
       </span>
 
       {/* flecha */}
@@ -154,11 +169,13 @@ export function MatchRow({ match, onClick }) {
 
 // ─── SpotlightMatch · tarjeta grande oscura (partido destacado) ──────────────
 export function SpotlightMatch({ match, onClick }) {
-  const home    = byCode[match.home]
-  const away    = byCode[match.away]
-  const info    = stadiums[match.stadium]
-  const isLive  = match.status === 'live' || match.status === 'halftime'
+  const home = getTeam(match.home)
+  const away = getTeam(match.away)
+  const info = stadiums[match.stadium]
+  const isLive = match.status === 'live' || match.status === 'halftime'
   const isFinal = match.status === 'final'
+
+  
 
   return (
     <div
@@ -225,7 +242,7 @@ export function SpotlightMatch({ match, onClick }) {
           <Eyebrow tone="onDark">↘ HOST VENUE</Eyebrow>
           <div style={{ fontFamily: 'var(--f-display)', fontSize: 'clamp(22px,2.5vw,30px)', lineHeight: .9, textTransform: 'uppercase', wordBreak: 'break-word' }}>{match.stadium}</div>
           <span className="gc-mono" style={{ fontSize: 11, color: 'rgba(247,241,223,.65)', letterSpacing: '.08em' }}>
-            {match.city.toUpperCase()}{info ? ` · CAP. ${info.cap.toLocaleString()}` : ''}
+            {safeText(match.city).toUpperCase()}{info ? ` · CAP. ${info.cap.toLocaleString()}` : ''}
           </span>
           {info && (
             <div style={{ marginTop: 6, fontSize: 12, color: 'rgba(247,241,223,.75)' }}>{info.surface} · {info.roof}</div>
@@ -240,40 +257,49 @@ export function SpotlightMatch({ match, onClick }) {
 }
 
 // ─── DateScrubber · barra interactiva de jornadas en la parte superior ───────
-export function DateScrubber({ active, onSelect }) {
+export function DateScrubber({ active, onSelect, days = matchDays }) {
   return (
     <div
       className="gc-row"
       style={{ borderTop: '1px solid var(--rule)', borderBottom: '1px solid var(--rule)', overflow: 'hidden' }}
     >
-      {matchDays.map(d => {
+      {days.map(d => {
         const isOn = active === d.key
         const stateColor =
           d.group === 'live'      ? 'var(--red)'
           : d.group === 'next'   ? 'var(--ink)'
           : 'var(--muted)'
+
         return (
           <button
             key={d.key}
             onClick={() => onSelect(d.key)}
             style={{
-              flex: 1, border: 0,
+              flex: 1,
+              border: 0,
               background: isOn ? 'var(--ink)' : 'var(--paper)',
-              color:      isOn ? 'var(--paper)' : 'var(--ink)',
-              padding: '16px 14px', cursor: 'pointer',
+              color: isOn ? 'var(--paper)' : 'var(--ink)',
+              padding: '16px 14px',
+              cursor: 'pointer',
               borderRight: '1px solid var(--rule)',
               transition: 'background .15s ease, color .15s ease',
               textAlign: 'left',
             }}
           >
-            <div className="gc-mono" style={{
-              fontSize: 10, letterSpacing: '.12em',
-              color:   isOn ? 'var(--paper)' : stateColor,
-              opacity: isOn ? .65 : 1,
-              fontWeight: 700, textTransform: 'uppercase',
-            }}>
+            <div
+              className="gc-mono"
+              style={{
+                fontSize: 10,
+                letterSpacing: '.12em',
+                color: isOn ? 'var(--paper)' : stateColor,
+                opacity: isOn ? .65 : 1,
+                fontWeight: 700,
+                textTransform: 'uppercase',
+              }}
+            >
               {d.group === 'live' ? '● ' : ''}{d.label}
             </div>
+
             <div style={{ fontFamily: 'var(--f-display)', fontSize: 28, lineHeight: 1, marginTop: 4 }}>
               {d.date}
             </div>

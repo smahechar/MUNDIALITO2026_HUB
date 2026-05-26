@@ -59,7 +59,7 @@ function StatusChips({ value, onChange, options }) {
 export default function TicketsPage() {
   const navigate = useNavigate()
   const { tickets }            = useTickets()
-  const { available }          = useAvailableTickets()
+  const { available, sectors } = useAvailableTickets()
   const [tab,        setTab]   = useState('all')
   const [reserving,  setRes]   = useState(null)
 
@@ -90,6 +90,7 @@ export default function TicketsPage() {
       {reserving && (
         <ReserveModal
           available={reserving}
+          sectors={sectors}
           onClose={() => setRes(null)}
           onComplete={(id) => navigate(`/tickets/${id}`)}
         />
@@ -168,7 +169,11 @@ export default function TicketsPage() {
       />
       <div style={{ padding: '22px 56px 0', display: 'grid', gridTemplateColumns: 'repeat(auto-fit,minmax(280px,1fr))', gap: 16 }}>
         {available.slice(0, 6).map((a, i) => (
-          <AvailableMatchCard key={i} available={a} onReserve={setRes} />
+          <AvailableMatchCard
+            key={a.matchId ?? i}
+            available={a}
+            onReserve={setRes}
+          />
         ))}
       </div>
 

@@ -2,9 +2,7 @@ import { useState, useEffect, useMemo } from 'react'
 import { Flag, Pill, Eyebrow, Btn, SectionHead } from '@/components/shared/atoms'
 import { Floodlight } from '@/components/shared/Layout'
 import { ModalOverlay } from '@/components/shared/Modal'
-import { byCode } from '@/mocks/data/nations'
-import { matches, stadiums } from '@/mocks/data/matches'
-import { stadiumSectors, getSector } from '@/mocks/data/tickets'
+import { ticketsService } from '@/services/tickets.service'
 
 // ─── Status config ────────────────────────────────────────────────────────────
 const STATUS_CFG = {
@@ -13,6 +11,32 @@ const STATUS_CFG = {
   expired:     { label: 'EXPIRADA',    stripe: 'var(--red)',     pillBg: 'var(--red)',     pillFg: 'var(--red-ink)'     },
   transferred: { label: 'TRANSFERIDA', stripe: 'var(--muted)',   pillBg: 'var(--paper-2)', pillFg: 'var(--muted)'       },
   refunded:    { label: 'REEMBOLSADA', stripe: 'var(--muted)',   pillBg: 'var(--paper-2)', pillFg: 'var(--muted)'       },
+}
+
+function getTeam(match, side) {
+  const code = side === 'home' ? match?.home : match?.away
+  const name = side === 'home' ? match?.homeName : match?.awayName
+
+  return {
+    code: String(code ?? 'TBD').toUpperCase(),
+    name: name || code || 'Por definir',
+  }
+}
+
+function getSectorFromList(sectors = [], sectorId) {
+  return sectors.find(s => s.id === sectorId) ?? {
+    id: sectorId,
+    name: sectorId || 'Sector',
+    priceUSD: 0,
+    desc: '',
+  }
+}
+
+const DEFAULT_CARD = {
+  number: '4242424242424242',
+  expMonth: 9,
+  expYear: 2028,
+  cvc: '123',
 }
 
 // ─── TicketStatusBadge ────────────────────────────────────────────────────────
@@ -113,12 +137,19 @@ export function QRPlaceholder({ seed = 'T-0000', size = 140 }) {
 
 // ─── BoardingPassRow · horizontal list card ───────────────────────────────────
 export function BoardingPassRow({ ticket, onOpen }) {
-  const cfg    = STATUS_CFG[ticket.status] || STATUS_CFG.confirmed
-  const match  = matches.find(m => m.id === ticket.matchId)
-  const sector = getSector(ticket.sector)
+  const cfg = STATUS_CFG[ticket.status] ?? STATUS_CFG.reserved
+
+  const match = ticket.match
   if (!match) return null
-  const home = byCode[match.home]
-  const away = byCode[match.away]
+
+  const home = getTeam(match, 'home')
+  const away = getTeam(match, 'away')
+
+  const sector = {
+    name: ticket.sectorName || ticket.sector || 'Sector',
+  }
+
+  
 
   return (
     <div
@@ -212,14 +243,46 @@ function PassField({ label, value, sub }) {
 }
 
 // ─── BoardingPassHero · full detail card ─────────────────────────────────────
-export function BoardingPassHero({ ticket, match, sector }) {
+export function BoardingPassHero({ ticket, match: propMatch, sector: propSector }) {
   const cfg = STATUS_CFG[ticket.status] || STATUS_CFG.confirmed
-  const home = byCode[match.home]
-  const away = byCode[match.away]
-  const stadiumInfo = stadiums[match.stadium]
-  const dateFmt = new Date(match.kickoff).toLocaleDateString('es-CO', { weekday: 'long', day: 'numeric', month: 'long', year: 'numeric' })
-  const timeFmt = new Date(match.kickoff).toLocaleTimeString('es-CO', { hour: '2-digit', minute: '2-digit' })
-  const gateNum = ((parseInt(ticket.id.slice(-3), 10) % 8) + 1).toString().padStart(2, '0')
+
+  const match = propMatch || ticket.match
+  if (!match) return null
+
+  const home = getTeam(match, 'home')
+  const away = getTeam(match, 'away')
+
+  const sector = propSector || {
+    name: ticket.sectorName || ticket.sector || 'Sector',
+  }
+
+  const stadiumInfo = {
+    name: match.stadium || 'Estadio por definir',
+    city: match.city || 'Ciudad por definir',
+  }
+
+  const kickoffDate = match.kickoff ? new Date(match.kickoff) : null
+
+  const dateFmt = kickoffDate
+    ? kickoffDate.toLocaleDateString('es-CO', {
+        weekday: 'long',
+        day: 'numeric',
+        month: 'long',
+        year: 'numeric',
+      })
+    : 'Fecha por definir'
+
+  const timeFmt = kickoffDate
+    ? kickoffDate.toLocaleTimeString('es-CO', {
+        hour: '2-digit',
+        minute: '2-digit',
+      })
+    : '--:--'
+
+  const numericPart = String(ticket.id || '0').replace(/\D/g, '')
+  const gateNum = ((parseInt(numericPart || '0', 10) % 8) + 1)
+    .toString()
+    .padStart(2, '0')
 
   return (
     <div style={{
@@ -269,10 +332,29 @@ export function BoardingPassHero({ ticket, match, sector }) {
             gap: 18, paddingTop: 22,
             borderTop: '1.5px dashed var(--rule)',
           }}>
-            <PassField label="ESTADIO"   value={match.stadium}      sub={`${match.city.toUpperCase()}${stadiumInfo ? ` · ${stadiumInfo.country.toUpperCase()}` : ''}`} />
-            <PassField label="FECHA"     value={dateFmt}            sub={`Hora: ${timeFmt} · UTC-5`} />
-            <PassField label="FASE"      value={match.phase.split('·')[0].trim()} sub={match.phase.split('·').slice(1).join('·').trim() || ''} />
-            <PassField label="CAPACIDAD" value={stadiumInfo ? stadiumInfo.cap.toLocaleString() : '—'} sub={stadiumInfo?.roof || ''} />
+            <PassField
+              label="ESTADIO"
+              value={match.stadium || 'Estadio por definir'}
+              sub={String(match.city || 'Ciudad por definir').toUpperCase()}
+            />
+
+            <PassField
+              label="FECHA"
+              value={dateFmt}
+              sub={`Hora: ${timeFmt} · UTC-5`}
+            />
+
+            <PassField
+              label="FASE"
+              value={String(match.phase || 'Fase por definir').split('·')[0].trim()}
+              sub={String(match.phase || '').split('·').slice(1).join('·').trim() || ''}
+            />
+
+            <PassField
+              label="CAPACIDAD"
+              value="—"
+              sub="Dato no disponible"
+            />
           </div>
         </div>
 
@@ -410,16 +492,17 @@ export function TicketTimeline({ events, correlationId }) {
 
 // ─── AvailableMatchCard ───────────────────────────────────────────────────────
 export function AvailableMatchCard({ available, onReserve }) {
-  const match = matches.find(m => m.id === available.matchId)
+  const match = available.match
   if (!match) return null
-  const home = byCode[match.home]
-  const away = byCode[match.away]
+
+  const home = getTeam(match, 'home')
+  const away = getTeam(match, 'away')
 
   const demandCfg = {
     high:   { label: 'ALTA DEMANDA', style: { background: 'var(--red)', color: 'var(--red-ink)', borderColor: 'transparent' } },
     medium: { label: 'DISPONIBLE',   style: {} },
     low:    { label: 'AMPLIA',       style: {} },
-  }[available.demand]
+  }[available.demand] ?? { label: 'DISPONIBLE', style: {} }
 
   const demandTone = available.demand === 'low' ? 'green' : 'default'
 
@@ -436,7 +519,9 @@ export function AvailableMatchCard({ available, onReserve }) {
           <span className="gc-mono" style={{ fontSize: 10, fontWeight: 700, letterSpacing: '.1em' }}>{home.code}</span>
           <span style={{ fontWeight: 700, fontSize: 13, textAlign: 'center' }}>{home.name}</span>
         </div>
+
         <span style={{ fontFamily: 'var(--f-display)', fontSize: 28, color: 'var(--muted)' }}>vs</span>
+
         <div className="gc-col gc-gap-xs" style={{ alignItems: 'center', flex: 1 }}>
           <Flag code={away.code} size={36} />
           <span className="gc-mono" style={{ fontSize: 10, fontWeight: 700, letterSpacing: '.1em' }}>{away.code}</span>
@@ -446,7 +531,13 @@ export function AvailableMatchCard({ available, onReserve }) {
 
       <div className="gc-col gc-gap-xs" style={{ paddingTop: 12, borderTop: '1px solid var(--rule)' }}>
         <span className="gc-mono" style={{ fontSize: 11, color: 'var(--muted)', letterSpacing: '.08em' }}>
-          {new Date(match.kickoff).toLocaleString('es-CO', { weekday: 'short', month: 'short', day: 'numeric', hour: '2-digit', minute: '2-digit' })}
+          {new Date(match.kickoff).toLocaleString('es-CO', {
+            weekday: 'short',
+            month: 'short',
+            day: 'numeric',
+            hour: '2-digit',
+            minute: '2-digit',
+          })}
         </span>
         <span className="gc-mono" style={{ fontSize: 11, color: 'var(--muted)', letterSpacing: '.08em' }}>
           {match.stadium} · {match.city}
@@ -456,10 +547,17 @@ export function AvailableMatchCard({ available, onReserve }) {
       <div className="gc-row" style={{ justifyContent: 'space-between', alignItems: 'center', marginTop: 'auto', paddingTop: 4 }}>
         <div className="gc-col">
           <Eyebrow style={{ fontSize: 9 }}>DESDE</Eyebrow>
-          <span style={{ fontFamily: 'var(--f-display)', fontSize: 32, lineHeight: 1 }}>USD {available.fromUSD}</span>
-          <span className="gc-mono" style={{ fontSize: 10, color: 'var(--muted)' }}>{available.remaining.toLocaleString()} disponibles</span>
+          <span style={{ fontFamily: 'var(--f-display)', fontSize: 32, lineHeight: 1 }}>
+            USD {available.fromUSD}
+          </span>
+          <span className="gc-mono" style={{ fontSize: 10, color: 'var(--muted)' }}>
+            {Number(available.remaining ?? 0).toLocaleString()} disponibles
+          </span>
         </div>
-        <Btn onClick={() => onReserve(available)} style={{ padding: '10px 18px', fontSize: 12 }}>Reservar →</Btn>
+
+        <Btn onClick={() => onReserve(available)} style={{ padding: '10px 18px', fontSize: 12 }}>
+          Reservar →
+        </Btn>
       </div>
     </div>
   )
@@ -499,32 +597,44 @@ function SummaryRow({ label, value, accent }) {
 
 // ─── ReserveModal · 3-step flow ───────────────────────────────────────────────
 // step 0: sector + qty | step 1: payment review | step 2: processing | step 3: confirmed
-export function ReserveModal({ available, onClose, onComplete }) {
+export function ReserveModal({ available, sectors = [], onClose, onComplete }) {
   const [step,       setStep]  = useState(0)
-  const [sectorId,   setSec]   = useState(stadiumSectors[1].id)
+  const [sectorId, setSec] = useState(() => sectors[0]?.id ?? 'norte-alto')
   const [qty,        setQty]   = useState(1)
   const [newTicketId, setTid]  = useState(null)
 
   const sessionExpires = useMemo(() => new Date(Date.now() + 15 * 60_000), [])
-  const sector  = getSector(sectorId)
-  const match   = matches.find(m => m.id === available.matchId)
-  const home    = byCode[match.home]
-  const away    = byCode[match.away]
+  const sector = getSectorFromList(sectors, sectorId)
+  const match = available.match
+  const home = getTeam(match, 'home')
+  const away = getTeam(match, 'away')
   const subtotal = sector.priceUSD * qty
   const fee      = Math.round(subtotal * 0.06)
   const total    = subtotal + fee
 
-  function handlePay() {
-    setStep(2)
-    // Backend team: replace with ticketsService.reserve(matchId, sectorId, qty)
-    // then ticketsService.confirmPayment(reservedTicketId)
-    setTimeout(() => {
-      const id = `T-${Math.floor(7000 + Math.random() * 1999)}`
-      setTid(id)
-      setStep(3)
-    }, 1500)
-  }
+  async function handlePay() {
+    try {
+      setStep(2)
 
+      const reserved = await ticketsService.reserve(
+        available.matchId,
+        sectorId,
+        qty
+      )
+
+      const confirmed = await ticketsService.confirmPayment(
+        reserved.id,
+        DEFAULT_CARD
+      )
+
+      setTid(confirmed.id)
+      setStep(3)
+    } catch (err) {
+      console.error('Error reservando o pagando entrada:', err)
+      alert(err.message || 'No se pudo completar la reserva')
+      setStep(1)
+    }
+  }
   const stepLabels = ['SECTOR', 'PAGO', 'CONFIRMACIÓN']
 
   return (
@@ -557,7 +667,7 @@ export function ReserveModal({ available, onClose, onComplete }) {
           <div className="gc-col gc-gap-sm">
             <Eyebrow style={{ fontSize: 10 }}>SECTOR DEL ESTADIO</Eyebrow>
             <div style={{ display: 'grid', gridTemplateColumns: 'repeat(2,1fr)', gap: 10 }}>
-              {stadiumSectors.map(s => {
+              {sectors.map(s => {
                 const active = s.id === sectorId
                 return (
                   <button key={s.id} onClick={() => setSec(s.id)} style={{

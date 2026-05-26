@@ -4,6 +4,32 @@ import { Floodlight, Watermark } from '@/components/shared/Layout'
 import { byCode } from '@/mocks/data/nations'
 import { stadiums } from '@/mocks/data/matches'
 
+
+function getTeam(code, fallbackName) {
+  const safeCode = String(code ?? '').trim().toUpperCase()
+
+  return byCode?.[safeCode] ?? {
+    code: safeCode || 'TBD',
+    name: fallbackName || safeCode || 'Por definir',
+  }
+}
+function upper(value, fallback = '—') {
+  return String(value ?? fallback).toUpperCase()
+}
+
+function getSafeStadium(match) {
+  const info = stadiums?.[match?.stadium]
+
+  return {
+    name: match?.stadium || 'Estadio por definir',
+    city: match?.city || 'Ciudad por definir',
+    country: info?.country || '',
+    cap: info?.cap || null,
+    roof: info?.roof || 'Open roof',
+    surface: info?.surface || 'Natural',
+    opened: info?.opened || '—',
+  }
+}
 // ─── Countdown ────────────────────────────────────────────────────────────────
 function Countdown({ target }) {
   const [diff, setDiff] = useState(target - Date.now())
@@ -45,9 +71,9 @@ export function FormChips({ form }) {
 
 // ─── MatchHero · broadcast-style header ──────────────────────────────────────
 export function MatchHero({ match, detail }) {
-  const home       = byCode[match.home]
-  const away       = byCode[match.away]
-  const stadiumInfo = stadiums[match.stadium]
+  const home = getTeam(match.home, match.homeName)
+  const away = getTeam(match.away, match.awayName)
+  const stadiumInfo = getSafeStadium(match)
   const isLive     = match.status === 'live' || match.status === 'halftime'
   const isFinal    = match.status === 'final'
 
@@ -64,7 +90,7 @@ export function MatchHero({ match, detail }) {
 
       <div style={{ padding: '20px 56px 8px', position: 'relative', zIndex: 2 }}>
         <div className="gc-row" style={{ justifyContent: 'space-between', alignItems: 'center' }}>
-          <Eyebrow>↘ {match.phase} · {stadiumInfo ? stadiumInfo.country : match.city}</Eyebrow>
+          <Eyebrow>↘ {match.phase || 'Fase por definir'} · {stadiumInfo.country || stadiumInfo.city}</Eyebrow>
           <div className="gc-row gc-gap-sm">
             {isLive
               ? <Pill live>{match.minute || 'LIVE'}</Pill>
@@ -113,8 +139,8 @@ export function MatchHero({ match, detail }) {
             <span style={{ fontFamily: 'var(--f-display)', fontSize: 'clamp(60px, 8vw, 116px)', color: 'var(--muted)', lineHeight: 1 }}>vs</span>
           )}
           <div className="gc-mono" style={{ fontSize: 12, color: 'var(--muted)', letterSpacing: '.12em', marginTop: 10, textTransform: 'uppercase' }}>
-            {match.stadium} · {match.city}
-            {stadiumInfo && ` · CAP. ${stadiumInfo.cap.toLocaleString()}`}
+            {stadiumInfo.name} · {stadiumInfo.city}
+            {stadiumInfo.cap ? ` · CAP. ${stadiumInfo.cap.toLocaleString()}` : ''}
           </div>
         </div>
 
@@ -300,13 +326,14 @@ export function MatchStats({ stats }) {
 
 // ─── MatchLineups ─────────────────────────────────────────────────────────────
 function LineupCard({ team, nation, side }) {
+  const safeNation = nation ?? { code: 'TBD', name: 'Por definir' }
   return (
     <div className="gc-card" style={{ padding: 24 }}>
       <div className="gc-row" style={{ justifyContent: 'space-between', marginBottom: 18, alignItems: 'center' }}>
         <div className="gc-row gc-gap-sm" style={{ alignItems: 'center' }}>
-          <Flag code={nation.code} size={28} />
+          <Flag code={safeNation.code} size={28} />
           <div className="gc-col">
-            <span style={{ fontFamily: 'var(--f-display)', fontSize: 26, textTransform: 'uppercase', lineHeight: 1 }}>{nation.name}</span>
+            <span style={{ fontFamily: 'var(--f-display)', fontSize: 26, textTransform: 'uppercase', lineHeight: 1 }}>{safeNation.name}</span>
             <span className="gc-mono" style={{ fontSize: 11, color: 'var(--muted)', letterSpacing: '.08em' }}>{team.manager} · {team.formation}</span>
           </div>
         </div>
@@ -361,7 +388,8 @@ function StatBox({ label, value }) {
 }
 
 export function StadiumCard({ name, city, matchTime, attendance }) {
-  const info = stadiums[name]
+  const info = stadiums?.[name] ?? {}
+  const safeCity = city || 'Ciudad por definir'
   return (
     <div className="gc-card" style={{ padding: 0, overflow: 'hidden' }}>
       <div style={{ position: 'relative', aspectRatio: '16 / 8', background: 'var(--green)', color: 'var(--green-ink)' }}>
@@ -393,7 +421,7 @@ export function StadiumCard({ name, city, matchTime, attendance }) {
           <div>
             <Eyebrow tone="onGreen">↘ HOST VENUE</Eyebrow>
             <h3 style={{ fontFamily: 'var(--f-display)', fontSize: 44, margin: '6px 0 4px', lineHeight: .9, textTransform: 'uppercase', color: 'var(--green-ink)' }}>{name}</h3>
-            <span className="gc-mono" style={{ fontSize: 12, opacity: .8, letterSpacing: '.1em' }}>{city.toUpperCase()}{info && ` · ${info.country.toUpperCase()}`}</span>
+            <span className="gc-mono" style={{ fontSize: 12, opacity: .8, letterSpacing: '.1em' }}>const info = stadiums?.[name] ?? {}const safeCity = city || 'Ciudad por definir'</span>
           </div>
         </div>
       </div>
@@ -422,7 +450,7 @@ export function PredictionBar({ pct, homeName, awayName }) {
         marginTop: 18, height: 64, borderRadius: 12, overflow: 'hidden', gap: 2,
       }}>
         <div style={{ background: 'var(--ink)', color: 'var(--paper)', padding: '0 14px', display: 'flex', flexDirection: 'column', justifyContent: 'center' }}>
-          <span className="gc-mono" style={{ fontSize: 10, opacity: .7, letterSpacing: '.08em' }}>{homeName.toUpperCase()} GANA</span>
+          <span className="gc-mono" style={{ fontSize: 10, opacity: .7, letterSpacing: '.08em' }}>{upper(homeName, 'Local')} GANA</span>
           <span style={{ fontFamily: 'var(--f-display)', fontSize: 36, lineHeight: 1 }}>{pct.homeWin}%</span>
         </div>
         <div style={{ background: 'var(--paper-2)', color: 'var(--ink)', padding: '0 14px', display: 'flex', flexDirection: 'column', justifyContent: 'center' }}>
@@ -430,7 +458,7 @@ export function PredictionBar({ pct, homeName, awayName }) {
           <span style={{ fontFamily: 'var(--f-display)', fontSize: 36, lineHeight: 1 }}>{pct.draw}%</span>
         </div>
         <div style={{ background: 'var(--red)', color: 'var(--red-ink)', padding: '0 14px', display: 'flex', flexDirection: 'column', justifyContent: 'center', alignItems: 'flex-end' }}>
-          <span className="gc-mono" style={{ fontSize: 10, opacity: .85, letterSpacing: '.08em' }}>{awayName.toUpperCase()} GANA</span>
+          <span className="gc-mono" style={{ fontSize: 10, opacity: .85, letterSpacing: '.08em' }}>{upper(awayName, 'Visitante')} GANA</span>
           <span style={{ fontFamily: 'var(--f-display)', fontSize: 36, lineHeight: 1 }}>{pct.awayWin}%</span>
         </div>
       </div>

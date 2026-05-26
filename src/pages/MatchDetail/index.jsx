@@ -11,6 +11,15 @@ import { useMatch, useMatchDetail } from '@/hooks/useMatches'
 import { byCode } from '@/mocks/data/nations'
 import { matches } from '@/mocks/data/matches'
 
+function getTeam(code, fallbackName) {
+  const safeCode = String(code ?? '').trim().toUpperCase()
+
+  return byCode?.[safeCode] ?? {
+    code: safeCode || 'TBD',
+    name: fallbackName || safeCode || 'Por definir',
+  }
+}
+
 const TABS = [
   { id: 'summary',  label: 'Resumen'       },
   { id: 'timeline', label: 'Timeline'      },
@@ -76,14 +85,30 @@ function StatsTeaser({ stats = {}, onMore }) {
 }
 
 // ─── SummaryTab ───────────────────────────────────────────────────────────────
-function SummaryTab({ match, detail, home, away, onTab }) {
-  const isLive     = match.status === 'live' || match.status === 'halftime'
-  const isFinal    = match.status === 'final'
+function SummaryTab({ match, detail = {}, home, away, onTab }) {
+  const safeHome = home ?? {
+    code: String(match?.home ?? 'TBD').toUpperCase(),
+    name: match?.homeName || match?.home || 'Por definir',
+  }
+
+  const safeAway = away ?? {
+    code: String(match?.away ?? 'TBD').toUpperCase(),
+    name: match?.awayName || match?.away || 'Por definir',
+  }
+
+  const isLive     = match?.status === 'live' || match?.status === 'halftime'
+  const isFinal    = match?.status === 'final'
   const isUpcoming = !isLive && !isFinal
 
-  const kickoffLabel = new Date(match.kickoff).toLocaleString(undefined, {
-    weekday: 'short', month: 'short', day: 'numeric', hour: '2-digit', minute: '2-digit',
-  })
+  const kickoffLabel = match?.kickoff
+    ? new Date(match.kickoff).toLocaleString(undefined, {
+        weekday: 'short',
+        month: 'short',
+        day: 'numeric',
+        hour: '2-digit',
+        minute: '2-digit',
+      })
+    : 'Fecha por definir'
 
   return (
     <div className="gc-col gc-gap-md">
@@ -103,7 +128,7 @@ function SummaryTab({ match, detail, home, away, onTab }) {
               }}>
                 <div className="gc-row gc-gap-sm" style={{ alignItems: 'center' }}>
                   <span style={{ fontFamily: 'var(--f-display)', fontSize: 20 }}>{e.minute}</span>
-                  <Flag code={e.team === 'home' ? home.code : away.code} size={16} />
+                  <Flag code={e.team === 'home' ? safeHomeome.code : safeAway.code} size={16} />
                   <span className="gc-mono" style={{ fontSize: 10, color: 'var(--muted)', letterSpacing: '.08em', textTransform: 'uppercase' }}>GOAL</span>
                 </div>
                 <span style={{ fontWeight: 700, fontSize: 13, marginTop: 4 }}>{e.player}</span>
@@ -116,7 +141,7 @@ function SummaryTab({ match, detail, home, away, onTab }) {
 
       {/* fan prediction (upcoming) */}
       {isUpcoming && detail.predictions && (
-        <PredictionBar pct={detail.predictions} homeName={home.name} awayName={away.name} />
+        <PredictionBar pct={detail.predictions} homeName={safeHome.name} awayName={safeAway.name} />
       )}
 
       {/* stats teaser + meta */}
@@ -142,20 +167,20 @@ function SummaryTab({ match, detail, home, away, onTab }) {
         <div className="gc-card" style={{ padding: 24 }}>
           <div className="gc-row" style={{ justifyContent: 'space-between', marginBottom: 14 }}>
             <Eyebrow>FORM · LAST 5</Eyebrow>
-            <Flag code={home.code} size={18} />
+            <Flag code={safeHome.code} size={18} />
           </div>
           <div className="gc-row gc-gap-md" style={{ alignItems: 'center' }}>
-            <span style={{ fontFamily: 'var(--f-display)', fontSize: 38, lineHeight: .9, textTransform: 'uppercase' }}>{home.name}</span>
+            <span style={{ fontFamily: 'var(--f-display)', fontSize: 38, lineHeight: .9, textTransform: 'uppercase' }}>{safeHome.name}</span>
             <FormChips form={detail.formHome || ['—','—','—','—','—']} />
           </div>
         </div>
         <div className="gc-card" style={{ padding: 24 }}>
           <div className="gc-row" style={{ justifyContent: 'space-between', marginBottom: 14 }}>
             <Eyebrow>FORM · LAST 5</Eyebrow>
-            <Flag code={away.code} size={18} />
+            <Flag code={safeAway.code} size={18} />
           </div>
           <div className="gc-row gc-gap-md" style={{ alignItems: 'center' }}>
-            <span style={{ fontFamily: 'var(--f-display)', fontSize: 38, lineHeight: .9, textTransform: 'uppercase' }}>{away.name}</span>
+            <span style={{ fontFamily: 'var(--f-display)', fontSize: 38, lineHeight: .9, textTransform: 'uppercase' }}>{safeAway.name}</span>
             <FormChips form={detail.formAway || ['—','—','—','—','—']} />
           </div>
         </div>
@@ -208,8 +233,8 @@ export default function MatchDetailPage() {
     )
   }
 
-  const home       = byCode[match.home]
-  const away       = byCode[match.away]
+  const home = getTeam(match.home, match.homeName)
+  const away = getTeam(match.away, match.awayName)
   const idx        = matches.findIndex(m => m.id === id)
   const prev       = idx > 0 ? matches[idx - 1] : null
   const next       = idx < matches.length - 1 ? matches[idx + 1] : null
@@ -243,7 +268,7 @@ export default function MatchDetailPage() {
 
       <div style={{ padding: '36px 56px 0' }}>
         {tab === 'summary'  && <SummaryTab match={match} detail={detail} home={home} away={away} onTab={setTab} />}
-        {tab === 'timeline' && <MatchTimeline events={detail?.events || []} homeCode={home.code} awayCode={away.code} />}
+        {tab === 'timeline' && <MatchTimeline events={detail?.events || []} homeCode={safeHome.code} awayCode={safeAway.code} />}
         {tab === 'stats'    && <MatchStats stats={detail?.stats} />}
         {tab === 'lineups'  && <MatchLineups home={detail?.lineupHome} away={detail?.lineupAway} homeNation={home} awayNation={away} />}
         {tab === 'venue'    && (
