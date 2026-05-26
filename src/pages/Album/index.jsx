@@ -1,241 +1,246 @@
-import { useState, useMemo } from 'react'
+import { useEffect, useMemo, useState } from "react"
+import { albumService } from "../../services/album.service"
 import { PageShell, Floodlight, Watermark, Band } from '@/components/shared/Layout'
 import { Eyebrow, Btn, SectionHead, useCountUp } from '@/components/shared/atoms'
-import { MatchTabs } from '@/components/matches/MatchDetail'
 import {
-  StickerCard, AlbumProgressBar, NationCard, NationModal,
-  PackOpenModal, TradeModal, ActiveTradesSection,
+  StickerCard,
+  AlbumProgressBar,
+  NationCard,
+  NationModal,
+  PackOpenModal,
+  TradeModal,
+  ActiveTradesSection,
 } from '@/components/album'
-import { nations } from '@/mocks/data/nations'
-import {
-  albumTotal, albumOwned, albumDuplicates, albumMissing,
-  albumPct, albumSetsComplete,
-  getNationStickers, isOwned, isDupe, getDupeStickers,
-  pendingTrades,
-} from '@/mocks/data/album'
 
-// ─── StatTilePro ─────────────────────────────────────────────────────────────
-function StatTilePro({ label, value, change, decimals = 0, tone = 'paper' }) {
-  const isNumeric = typeof value === 'number' && !isNaN(value)
-  const v = useCountUp(isNumeric ? value : 0, 1400)
-  const bg = tone === 'ink' ? 'var(--ink)' : tone === 'red' ? 'var(--red)' : tone === 'gold' ? 'var(--gold)' : tone === 'green' ? 'var(--green)' : 'var(--paper)'
-  const fg = tone === 'ink' ? 'var(--paper)' : tone === 'red' ? 'var(--red-ink)' : tone === 'gold' ? 'var(--gold-ink)' : tone === 'green' ? 'var(--green-ink)' : 'var(--ink)'
-  const display = !isNumeric ? value : decimals ? v.toFixed(decimals) : value >= 1000 ? Math.round(v).toLocaleString() : Math.round(v)
-  return (
-    <div className="gc-card gc-hover" style={{ background: bg, color: fg, padding: 24, borderColor: bg === 'var(--paper)' ? 'var(--rule)' : 'transparent', position: 'relative', overflow: 'hidden' }}>
-      <div style={{ position: 'absolute', inset: 0, pointerEvents: 'none', background: `radial-gradient(circle at 100% 0%, ${tone === 'ink' ? 'rgba(247,241,223,.06)' : 'rgba(255,255,255,.18)'}, transparent 60%)` }} />
-      <Eyebrow style={{ color: fg, opacity: .7, position: 'relative' }}>{label}</Eyebrow>
-      <div style={{ fontFamily: 'var(--f-display)', fontSize: 64, marginTop: 10, lineHeight: .85, position: 'relative' }}>{display}</div>
-      <div className="gc-mono" style={{ fontSize: 11.5, marginTop: 12, opacity: .8, letterSpacing: '.06em', position: 'relative' }}>{change}</div>
-    </div>
-  )
-}
-
-// ─── AlbumPage ────────────────────────────────────────────────────────────────
 export default function AlbumPage() {
-  const [statusFilter, setStatusFilter] = useState('all')
-  const [groupFilter,  setGroupFilter]  = useState('all')
-  const [tab,          setTab]          = useState('album')
-  const [expandedCode, setExpanded]     = useState(null)
-  const [showPack,     setShowPack]     = useState(false)
-  const [showTrade,    setShowTrade]    = useState(false)
-  const [search,       setSearch]       = useState('')
+  const [album, setAlbum] = useState(null)
+  const [loading, setLoading] = useState(true)
+  const [error, setError] = useState("")
+  const [openingPack, setOpeningPack] = useState(false)
+  const [lastPack, setLastPack] = useState(null)
 
-  const GROUPS = ['A', 'B', 'C', 'D', 'E', 'F']
-  const TABS   = [{ id: 'album', label: 'Mi álbum' }, { id: 'trades', label: 'Intercambios' }]
+  const [selectedNation, setSelectedNation] = useState(null)
+  const [packModalOpen, setPackModalOpen] = useState(false)
+  const [tradeModalOpen, setTradeModalOpen] = useState(false)
 
-  const filteredNations = useMemo(() => {
-    let ns = nations
-    if (search.trim()) {
-      const q = search.toLowerCase()
-      ns = ns.filter(n => n.name.toLowerCase().includes(q) || n.code.toLowerCase().includes(q))
+  async function loadAlbum() {
+    try {
+      setLoading(true)
+      setError("")
+      const data = await albumService.getAlbum()
+      setAlbum(data)
+    } catch (err) {
+      setError(err.message || "No se pudo cargar el álbum")
+    } finally {
+      setLoading(false)
     }
-    if (statusFilter === 'owned')   ns = ns.filter(n => getNationStickers(n.code).every(s => isOwned(s.id)))
-    if (statusFilter === 'missing') ns = ns.filter(n => getNationStickers(n.code).some(s => !isOwned(s.id)))
-    if (statusFilter === 'dupes')   ns = ns.filter(n => getNationStickers(n.code).some(s => isDupe(s.id)))
-    if (groupFilter !== 'all')      ns = ns.filter(n => n.group === groupFilter)
-    return ns
-  }, [statusFilter, groupFilter, search])
+  }
 
-  const expandedNation = expandedCode ? nations.find(n => n.code === expandedCode) : null
+  async function handleOpenPack() {
+    try {
+      setOpeningPack(true)
+      setError("")
+
+      const pack = await albumService.openPack()
+      setLastPack(pack)
+      setPackModalOpen(true)
+
+      await loadAlbum()
+    } catch (err) {
+      setError(err.message || "No se pudo abrir el sobre")
+    } finally {
+      setOpeningPack(false)
+    }
+  }
+
+  useEffect(() => {
+    loadAlbum()
+  }, [])
+
+  const stickers = Array.isArray(album?.stickers) ? album.stickers : []
+  const nationProgress = Array.isArray(album?.nations) ? album.nations : []
+
+  const albumTotal = Number(album?.total ?? 0)
+  const albumOwned = Number(album?.owned ?? 0)
+  const albumDuplicates = Number(album?.duplicates ?? 0)
+  const albumPct = Number(album?.percent ?? 0)
+  const albumMissing = Math.max(albumTotal - albumOwned, 0)
+
+  const dupeStickers = useMemo(() => {
+    return stickers.filter(s => s.count > 1 || s.duplicate)
+  }, [stickers])
+
+  function getNationStickersReal(code) {
+    return stickers.filter(s => s.nation === code)
+  }
+
+  function isOwnedReal(stickerId) {
+    const sticker = stickers.find(s => s.id === stickerId)
+    return Boolean(sticker?.owned || sticker?.count > 0)
+  }
+
+  function isDupeReal(stickerId) {
+    const sticker = stickers.find(s => s.id === stickerId)
+    return Boolean(sticker?.duplicate || sticker?.count > 1)
+  }
+
+  if (loading) {
+    return (
+      <PageShell>
+        <div className="gc-card">Cargando álbum...</div>
+      </PageShell>
+    )
+  }
+
+  if (error) {
+    return (
+      <PageShell>
+        <div className="gc-card">
+          <h2>Error cargando álbum</h2>
+          <p>{error}</p>
+          <Btn onClick={loadAlbum}>Reintentar</Btn>
+        </div>
+      </PageShell>
+    )
+  }
 
   return (
     <PageShell>
+      <Floodlight />
+      <Watermark text="ALBUM" />
 
-      {/* Modals */}
-      {showPack  && <PackOpenModal onClose={() => setShowPack(false)} />}
-      {showTrade && <TradeModal    onClose={() => setShowTrade(false)} />}
-      {expandedNation && <NationModal nation={expandedNation} onClose={() => setExpanded(null)} />}
+      <div className="gc-col gc-gap-xl">
+        <section className="gc-card" style={{ padding: 28 }}>
+          <Eyebrow>ÁLBUM OFICIAL</Eyebrow>
 
-      {/* ── Hero ── */}
-      <section style={{ position: 'relative', paddingBottom: 28, overflow: 'hidden' }}>
-        <Floodlight size={680} color="color-mix(in oklab, var(--gold) 60%, transparent)" opacity={.32} top={-260} left="30%" blend="multiply" />
-        <Floodlight size={440} color="color-mix(in oklab, var(--green) 55%, transparent)" opacity={.24} bottom={-260} right={-120} blend="multiply" />
-        <Watermark style={{ top: 200, right: -20 }}>{albumTotal}</Watermark>
+          <h1 style={{ fontFamily: "var(--f-display)", fontSize: 64, margin: 0 }}>
+            Álbum
+          </h1>
 
-        <div style={{ padding: '20px 56px 0', position: 'relative', zIndex: 2 }}>
-          <Eyebrow>COLECCIÓN MUNDIAL 2026 · {albumSetsComplete} / {nations.length} SELECCIONES COMPLETAS</Eyebrow>
-          <div className="gc-row" style={{ justifyContent: 'space-between', alignItems: 'flex-end', flexWrap: 'wrap', gap: 16, marginTop: 8 }}>
-            <h1 style={{ fontFamily: 'var(--f-display)', fontSize: 'clamp(56px, 8vw, 124px)', margin: 0, lineHeight: .85, textTransform: 'uppercase' }}>
-              Mi <span style={{ color: 'var(--gold)' }}>Álbum.</span>
-            </h1>
-            <div className="gc-row gc-gap-sm">
-              <Btn kind="ghost" onClick={() => setShowTrade(true)}>Intercambiar</Btn>
-              <Btn style={{ background: 'var(--gold)', color: 'var(--gold-ink)' }} onClick={() => setShowPack(true)}>
-                Abrir sobre ★
-              </Btn>
+          <p>
+            Progreso real del servidor: {albumOwned}/{albumTotal} láminas.
+          </p>
+
+          <AlbumProgressBar
+            owned={albumOwned}
+            total={albumTotal}
+            missing={albumMissing}
+            duplicates={albumDuplicates}
+            pct={albumPct}
+            value={albumPct}
+          />
+
+          <div className="gc-row gc-gap-md" style={{ marginTop: 18, flexWrap: "wrap" }}>
+            <div className="gc-card" style={{ padding: 16 }}>
+              <Eyebrow>Total</Eyebrow>
+              <strong>{albumTotal}</strong>
+            </div>
+
+            <div className="gc-card" style={{ padding: 16 }}>
+              <Eyebrow>Obtenidas</Eyebrow>
+              <strong>{albumOwned}</strong>
+            </div>
+
+            <div className="gc-card" style={{ padding: 16 }}>
+              <Eyebrow>Faltantes</Eyebrow>
+              <strong>{albumMissing}</strong>
+            </div>
+
+            <div className="gc-card" style={{ padding: 16 }}>
+              <Eyebrow>Duplicadas</Eyebrow>
+              <strong>{albumDuplicates}</strong>
             </div>
           </div>
-        </div>
 
-        <div style={{ padding: '22px 56px 0', position: 'relative', zIndex: 1 }}>
-          <div className="gc-rule-double" />
-        </div>
-
-        <div style={{ padding: '24px 56px 0', position: 'relative' }}>
-          <AlbumProgressBar owned={albumOwned} total={albumTotal} />
-          <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(140px, 1fr))', gap: 14, marginTop: 20 }}>
-            <StatTilePro label="TOTAL"          value={albumTotal}       change={`de ${albumTotal} láminas`}       tone="paper" />
-            <StatTilePro label="OBTENIDAS"      value={albumOwned}       change={`${albumPct}% del álbum`}          tone="ink" />
-            <StatTilePro label="REPETIDAS"      value={albumDuplicates}  change="disponibles para intercambio"      tone="gold" />
-            <StatTilePro label="FALTAN"         value={albumMissing}     change="para completar"                   tone="red" />
-            <StatTilePro label="SETS COMPLETOS" value={albumSetsComplete} change={`de ${nations.length} selecciones`} tone="green" />
+          <div style={{ marginTop: 20 }}>
+            <Btn onClick={handleOpenPack} disabled={openingPack}>
+              {openingPack ? "Abriendo..." : "Abrir sobre"}
+            </Btn>
           </div>
-        </div>
-      </section>
+        </section>
 
-      <MatchTabs tabs={TABS} active={tab} onSelect={setTab} />
+        <section>
+          <SectionHead
+            eyebrow="COLECCIÓN"
+            title="Progreso por selección"
+            desc="Datos calculados desde MySQL."
+          />
 
-      {/* ── TAB: Mi álbum ── */}
-      {tab === 'album' && (
-        <div style={{ padding: '28px 56px 0' }}>
-
-          {/* filters row */}
-          <div className="gc-row" style={{ justifyContent: 'space-between', alignItems: 'center', marginBottom: 20, flexWrap: 'wrap', gap: 14 }}>
-            <div className="gc-row gc-gap-md" style={{ flexWrap: 'wrap', alignItems: 'center' }}>
-              <div className="gc-tabs">
-                {[
-                  { id: 'all',     label: 'TODAS' },
-                  { id: 'owned',   label: 'COMPLETAS' },
-                  { id: 'missing', label: 'INCOMPLETAS' },
-                  { id: 'dupes',   label: 'REPETIDAS' },
-                ].map(o => (
-                  <button key={o.id} onClick={() => setStatusFilter(o.id)} className={statusFilter === o.id ? 'is-on' : ''}>{o.label}</button>
-                ))}
-              </div>
-
-              <div className="gc-row gc-gap-xs" style={{ alignItems: 'center' }}>
-                <Eyebrow style={{ marginRight: 4 }}>GRP</Eyebrow>
-                {['all', ...GROUPS].map(g => (
-                  <button key={g} onClick={() => setGroupFilter(g)} style={{
-                    border: 0,
-                    background: groupFilter === g ? 'var(--ink)' : 'transparent',
-                    color:      groupFilter === g ? 'var(--paper)' : 'var(--ink)',
-                    width: 30, height: 30, borderRadius: 6, cursor: 'pointer',
-                    fontFamily: 'var(--f-sub)', fontWeight: 800, fontSize: 12,
-                    letterSpacing: '.04em', textTransform: 'uppercase',
-                    outline: groupFilter === g ? 'none' : '1px solid var(--rule)',
-                    transition: 'background .15s ease, color .15s ease',
-                  }}>{g === 'all' ? '☰' : g}</button>
-                ))}
-              </div>
-            </div>
-
-            <input
-              value={search}
-              onChange={e => setSearch(e.target.value)}
-              placeholder="Buscar selección…"
-              style={{
-                fontFamily: 'var(--f-body)', fontSize: 13, padding: '10px 14px',
-                borderRadius: 999, border: '1px solid var(--rule)',
-                background: 'var(--paper-2)', color: 'var(--ink)', outline: 'none', width: 200,
-              }}
-            />
+          <div className="gc-grid">
+            {nationProgress.map((nation) => (
+              <NationCard
+                key={nation.code}
+                nation={nation}
+                owned={nation.owned}
+                total={nation.total}
+                pct={nation.percent}
+                onClick={() => setSelectedNation(nation)}
+              />
+            ))}
           </div>
+        </section>
 
-          <Eyebrow style={{ marginBottom: 14 }}>
-            ↘ {filteredNations.length} SELECCIONES · {statusFilter !== 'all' ? statusFilter.toUpperCase() : 'TODAS LAS CATEGORÍAS'}
-          </Eyebrow>
+        <section className="gc-card" style={{ padding: 28 }}>
+          <SectionHead
+            eyebrow="LÁMINAS"
+            title="Mis stickers"
+            desc="Láminas reales asociadas al usuario autenticado."
+          />
 
-          {filteredNations.length === 0 ? (
-            <div className="gc-card" style={{ padding: 56, textAlign: 'center' }}>
-              <Eyebrow>SIN RESULTADOS</Eyebrow>
-              <h3 style={{ fontFamily: 'var(--f-display)', fontSize: 42, margin: '10px 0 8px', lineHeight: .9 }}>Ninguna selección coincide.</h3>
-              <p style={{ fontSize: 13, color: 'var(--ink-2)' }}>Probá cambiando los filtros o borrando la búsqueda.</p>
-            </div>
-          ) : (
-            <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(220px, 1fr))', gap: 16 }}>
-              {filteredNations.map(n => (
-                <NationCard key={n.code} nation={n} onExpand={() => setExpanded(n.code)} />
-              ))}
-            </div>
-          )}
-
-          <Band tone="gold" style={{ marginTop: 56 }}>
-            <Floodlight size={500} color="var(--red)" opacity={.18} bottom={-280} left={-160} blend="multiply" />
-            <div className="gc-row" style={{ justifyContent: 'space-between', alignItems: 'center', gap: 24, position: 'relative', flexWrap: 'wrap' }}>
-              <div>
-                <Eyebrow tone="gold">↘ FALTAN {albumMissing} LÁMINAS</Eyebrow>
-                <h2 style={{ fontFamily: 'var(--f-display)', fontSize: 'clamp(40px, 5.5vw, 80px)', margin: '8px 0 0', lineHeight: .85, textTransform: 'uppercase' }}>Abrí otro sobre.</h2>
-                <p style={{ fontSize: 14, maxWidth: 460, marginTop: 12, lineHeight: 1.5 }}>
-                  Cada sobre trae 5 láminas — al menos 1 Rara garantizada. Usá las repetidas para intercambiar.
-                </p>
+          <div
+            style={{
+              display: "grid",
+              gridTemplateColumns: "repeat(auto-fill, minmax(120px, 1fr))",
+              gap: 16,
+              alignItems: "start",
+              marginTop: 24,
+            }}
+          >
+            {stickers.map((sticker) => (
+              <div
+                key={sticker.id}
+                style={{
+                  display: "flex",
+                  justifyContent: "center",
+                }}
+              >
+                <StickerCard
+                  sticker={sticker}
+                  owned={isOwnedReal(sticker.id)}
+                  dupe={isDupeReal(sticker.id)}
+                  count={sticker.count}
+                />
               </div>
-              <Btn kind="primary" style={{ background: 'var(--ink)', color: 'var(--paper)' }} onClick={() => setShowPack(true)}>
-                Abrir sobre →
-              </Btn>
-            </div>
-          </Band>
-        </div>
+            ))}
+          </div>
+        </section>
+
+        <ActiveTradesSection trades={[]} duplicates={dupeStickers} />
+      </div>
+
+      {selectedNation && (
+        <NationModal
+          nation={selectedNation}
+          stickers={getNationStickersReal(selectedNation.code)}
+          isOwned={isOwnedReal}
+          isDupe={isDupeReal}
+          onClose={() => setSelectedNation(null)}
+        />
       )}
 
-      {/* ── TAB: Intercambios ── */}
-      {tab === 'trades' && (
-        <div style={{ padding: '28px 56px 0' }}>
-          <div className="gc-row" style={{ justifyContent: 'space-between', alignItems: 'baseline', marginBottom: 20 }}>
-            <SectionHead num="01" label={`↘ INTERCAMBIOS · ${pendingTrades.length} ACTIVOS`} title="Intercambios" />
-            <Btn onClick={() => setShowTrade(true)} style={{ marginTop: -60 }}>+ Proponer</Btn>
-          </div>
+      {packModalOpen && lastPack && (
+        <PackOpenModal
+          pack={lastPack}
+          stickers={lastPack.stickers || []}
+          onClose={() => setPackModalOpen(false)}
+        />
+      )}
 
-          {pendingTrades.length === 0 ? (
-            <div className="gc-card" style={{ padding: 56, textAlign: 'center' }}>
-              <Eyebrow>SIN INTERCAMBIOS</Eyebrow>
-              <h3 style={{ fontFamily: 'var(--f-display)', fontSize: 42, margin: '10px 0 8px', lineHeight: .9 }}>Propone un intercambio.</h3>
-              <p style={{ fontSize: 13, color: 'var(--ink-2)' }}>Usá tus repetidas para conseguir las que faltan.</p>
-              <div style={{ marginTop: 20 }}><Btn onClick={() => setShowTrade(true)}>Proponer intercambio →</Btn></div>
-            </div>
-          ) : (
-            <ActiveTradesSection trades={pendingTrades} />
-          )}
-
-          <div style={{ marginTop: 36 }}>
-            <SectionHead num="02" label={`↘ TUS REPETIDAS · ${albumDuplicates} DISPONIBLES`} title="Repetidas" />
-            <div style={{ display: 'flex', gap: 10, flexWrap: 'wrap', marginTop: 16 }}>
-              {getDupeStickers().slice(0, 24).map(s => (
-                <div key={s.id} className="gc-col gc-gap-xs" style={{ alignItems: 'center' }}>
-                  <StickerCard sticker={s} size="sm" showCount clickable onClick={() => setShowTrade(true)} />
-                </div>
-              ))}
-            </div>
-          </div>
-
-          <Band tone="ink" style={{ marginTop: 56 }}>
-            <Floodlight size={500} color="var(--gold)" opacity={.22} top={-200} right={-100} />
-            <div className="gc-row" style={{ justifyContent: 'space-between', alignItems: 'center', gap: 24, position: 'relative', flexWrap: 'wrap' }}>
-              <div>
-                <Eyebrow tone="onDark">↗ INTERCAMBIÁ TUS REPETIDAS</Eyebrow>
-                <h2 style={{ fontFamily: 'var(--f-display)', fontSize: 'clamp(36px, 5vw, 72px)', margin: '8px 0 0', lineHeight: .85, textTransform: 'uppercase' }}>
-                  Conseguí las que faltan.
-                </h2>
-              </div>
-              <Btn style={{ background: 'var(--gold)', color: 'var(--gold-ink)' }} onClick={() => setShowTrade(true)}>
-                Proponer →
-              </Btn>
-            </div>
-          </Band>
-
-          <div style={{ height: 80 }} />
-        </div>
+      {tradeModalOpen && (
+        <TradeModal
+          duplicates={dupeStickers}
+          onClose={() => setTradeModalOpen(false)}
+        />
       )}
     </PageShell>
   )

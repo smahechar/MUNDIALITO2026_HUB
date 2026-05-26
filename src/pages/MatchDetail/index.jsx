@@ -21,23 +21,40 @@ const TABS = [
 ]
 
 // ─── StatsTeaser · compact 3-row preview ─────────────────────────────────────
-function StatsTeaser({ stats, onMore }) {
+function StatsTeaser({ stats = {}, onMore }) {
   const rows = [
     { l: 'POSESIÓN',      k: 'possession',    pct: true  },
     { l: 'TIROS AL ARCO', k: 'shotsOnTarget', pct: false },
     { l: 'PASES',         k: 'passes',        pct: false },
   ]
+
+  const getPair = (value) => {
+    if (Array.isArray(value)) {
+      return [Number(value[0] || 0), Number(value[1] || 0)]
+    }
+
+    if (value && typeof value === 'object') {
+      const home = value.home ?? value.h ?? value.local ?? 0
+      const away = value.away ?? value.a ?? value.visitante ?? 0
+      return [Number(home || 0), Number(away || 0)]
+    }
+
+    return [0, 0]
+  }
+
   return (
     <div className="gc-card" style={{ padding: 28 }}>
       <div className="gc-row" style={{ justifyContent: 'space-between', marginBottom: 18, alignItems: 'baseline' }}>
         <Eyebrow>STATS · TEASER</Eyebrow>
         <span className="gc-link" onClick={onMore} style={{ fontSize: 11, cursor: 'pointer' }}>Ver completo →</span>
       </div>
+
       <div className="gc-col gc-gap-md">
         {rows.map(r => {
-          const [h, a] = stats[r.k]
+          const [h, a] = getPair(stats?.[r.k])
           const total  = r.pct ? 100 : h + a
           const hPct   = total > 0 ? (h / total) * 100 : 50
+
           return (
             <div key={r.k}>
               <div className="gc-row" style={{ justifyContent: 'space-between', marginBottom: 6, alignItems: 'baseline' }}>
@@ -45,6 +62,7 @@ function StatsTeaser({ stats, onMore }) {
                 <span className="gc-mono" style={{ fontSize: 11, color: 'var(--muted)', letterSpacing: '.1em' }}>{r.l}</span>
                 <span style={{ fontFamily: 'var(--f-display)', fontSize: 24, lineHeight: 1 }}>{a}{r.pct && '%'}</span>
               </div>
+
               <div style={{ display: 'grid', gridTemplateColumns: `${hPct}% ${100 - hPct}%`, height: 6, background: 'var(--paper-2)', borderRadius: 999, overflow: 'hidden', gap: 2 }}>
                 <div style={{ background: 'var(--ink)' }} />
                 <div style={{ background: 'var(--red)' }} />

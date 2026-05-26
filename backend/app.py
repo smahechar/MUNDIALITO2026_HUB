@@ -11,6 +11,7 @@ Flask app con:
 from flask import Flask, jsonify
 from flask_cors import CORS
 from apscheduler.schedulers.background import BackgroundScheduler
+from flask import redirect
 
 # ─── Routers ──────────────────────────────────────────────────────────────────
 from routers.auth        import auth_bp
@@ -68,15 +69,8 @@ def create_app() -> Flask:
 
     # ── Health check ──────────────────────────────────────────────────────────
     @app.get("/")
-    def health():
-        db_ok = check_connection()
-        status = "ok" if db_ok else "degraded"
-        code   = 200  if db_ok else 503
-        return jsonify({
-            "status":  status,
-            "service": "Mundialito 2026 Hub API v1",
-            "db":      "connected" if db_ok else "unreachable",
-        }), code
+    def root():
+        return redirect("http://localhost:5173/login")
 
     # ── Scheduler de expiración de tickets ────────────────────────────────────
     scheduler = BackgroundScheduler(daemon=True)

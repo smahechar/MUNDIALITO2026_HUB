@@ -1,182 +1,86 @@
-import { useState } from 'react'
-import { matches as initialMatches } from '@/mocks/data/matches'
+import { useEffect, useMemo, useState } from 'react'
+import { adminService } from '@/services/admin.service'
 
-const STATUS_MAP = {
-  upcoming: { label: 'Programado', bg: 'rgba(244,181,0,.12)',   fg: 'var(--gold)'              },
-  live:     { label: 'En vivo',    bg: 'rgba(34,197,94,.12)',   fg: '#22c55e'                  },
-  halftime: { label: 'Descanso',   bg: 'rgba(34,197,94,.08)',   fg: '#22c55e'                  },
-  final:    { label: 'Finalizado', bg: 'rgba(246,239,217,.07)', fg: 'rgba(246,239,217,.45)'    },
-}
-const DEFAULT_STATUS = { label: 'Desconocido', bg: 'rgba(246,239,217,.05)', fg: 'rgba(246,239,217,.3)' }
-
-// ─── ScoreInput ───────────────────────────────────────────────────────────────
-function ScoreInput({ value, onChange }) {
-  return (
-    <input
-      type="number" min={0} max={99} value={value}
-      onChange={e => onChange(Number(e.target.value))}
-      style={{
-        width: 44, textAlign: 'center', padding: '6px 0',
-        borderRadius: 6, border: '1px solid rgba(246,239,217,0.2)',
-        background: 'rgba(246,239,217,0.07)',
-        color: 'var(--paper)', fontFamily: 'var(--f-display)', fontSize: 22,
-        outline: 'none',
-      }}
-    />
-  )
-}
-
-// ─── MatchRow ─────────────────────────────────────────────────────────────────
 function MatchRow({ match, onSave }) {
   const [editing, setEditing] = useState(false)
-  const [hs, setHs] = useState(match.homeScore ?? 0)
-  const [as_, setAs] = useState(match.awayScore ?? 0)
-  const [status, setStatus] = useState(match.status)
-  const st = STATUS_MAP[match.status] ?? DEFAULT_STATUS
+  const [form, setForm] = useState({
+    homeScore: match.homeScore ?? 0,
+    awayScore: match.awayScore ?? 0,
+    status: match.status || 'upcoming',
+    minute: match.minute || '',
+  })
 
-  function handleSave() {
-    onSave(match.id, { homeScore: hs, awayScore: as_, status })
+  useEffect(() => {
+    setForm({ homeScore: match.homeScore ?? 0, awayScore: match.awayScore ?? 0, status: match.status || 'upcoming', minute: match.minute || '' })
+  }, [match])
+
+  async function save() {
+    await onSave(match.id, { ...form, homeScore: Number(form.homeScore), awayScore: Number(form.awayScore) })
     setEditing(false)
   }
 
   return (
-    <div style={{
-      display: 'flex', alignItems: 'center', gap: 16, padding: '16px 20px',
-      borderBottom: '1px solid rgba(246,239,217,0.06)',
-    }}>
-      {/* Status pill */}
-      <span style={{
-        padding: '3px 9px', borderRadius: 999, flexShrink: 0,
-        background: st.bg, color: st.fg,
-        fontFamily: 'var(--f-mono)', fontSize: 9, fontWeight: 700, letterSpacing: '.1em',
-      }}>
-        {st.label.toUpperCase()}
-      </span>
-
-      {/* Teams + score */}
-      <div style={{ flex: 1, minWidth: 0 }}>
-        <div style={{ display: 'flex', alignItems: 'center', gap: 10, flexWrap: 'wrap' }}>
-          <span style={{ fontFamily: 'var(--f-sub)', fontWeight: 700, fontSize: 14, color: 'var(--paper)' }}>
-            {match.home}
-          </span>
-          {editing ? (
-            <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
-              <ScoreInput value={hs} onChange={setHs} />
-              <span style={{ color: 'rgba(246,239,217,.3)', fontFamily: 'var(--f-display)', fontSize: 20 }}>–</span>
-              <ScoreInput value={as_} onChange={setAs} />
-            </div>
-          ) : (
-            <span style={{ fontFamily: 'var(--f-display)', fontSize: 22, color: 'var(--paper)', lineHeight: 1 }}>
-              {match.homeScore ?? '–'} · {match.awayScore ?? '–'}
-            </span>
-          )}
-          <span style={{ fontFamily: 'var(--f-sub)', fontWeight: 700, fontSize: 14, color: 'var(--paper)' }}>
-            {match.away}
-          </span>
+    <div style={{ display: 'grid', gridTemplateColumns: '120px 1fr 280px 100px', alignItems: 'center', gap: 12, padding: '14px 18px', borderBottom: '1px solid rgba(246,239,217,.07)', color: 'var(--paper)' }}>
+      <span style={{ fontFamily: 'var(--f-mono)', fontSize: 11, color: match.status === 'live' ? '#22c55e' : match.status === 'final' ? 'rgba(246,239,217,.45)' : 'var(--gold)', textTransform: 'uppercase' }}>{match.status}</span>
+      <div style={{ fontFamily: 'var(--f-sub)', fontWeight: 700, fontSize: 18 }}>{match.home} {match.homeScore ?? '-'} - {match.awayScore ?? '-'} {match.away}</div>
+      {editing ? (
+        <div style={{ display: 'flex', gap: 8 }}>
+          <input type="number" min="0" value={form.homeScore} onChange={e => setForm(f => ({ ...f, homeScore: e.target.value }))} style={{ width: 56 }} />
+          <input type="number" min="0" value={form.awayScore} onChange={e => setForm(f => ({ ...f, awayScore: e.target.value }))} style={{ width: 56 }} />
+          <select value={form.status} onChange={e => setForm(f => ({ ...f, status: e.target.value }))}>
+            <option value="upcoming">upcoming</option><option value="live">live</option><option value="halftime">halftime</option><option value="final">final</option>
+          </select>
+          <input value={form.minute} onChange={e => setForm(f => ({ ...f, minute: e.target.value }))} placeholder="min" style={{ width: 60 }} />
         </div>
-        <div style={{ fontFamily: 'var(--f-mono)', fontSize: 10, opacity: .35, marginTop: 4, letterSpacing: '.06em' }}>
-          {match.date} {match.time} · {match.venue}
-        </div>
-      </div>
-
-      {/* Status selector when editing */}
-      {editing && (
-        <select
-          value={status}
-          onChange={e => setStatus(e.target.value)}
-          style={{
-            padding: '7px 10px', borderRadius: 7, fontSize: 11,
-            background: 'rgba(246,239,217,0.07)',
-            border: '1px solid rgba(246,239,217,0.15)',
-            color: 'var(--paper)', fontFamily: 'var(--f-mono)', cursor: 'pointer',
-          }}
-        >
-          <option value="upcoming">Programado</option>
-          <option value="live">En vivo</option>
-          <option value="halftime">Descanso (HT)</option>
-          <option value="final">Finalizado</option>
-        </select>
-      )}
-
-      {/* Actions */}
-      <div style={{ display: 'flex', gap: 8, flexShrink: 0 }}>
-        {editing ? (
-          <>
-            <button onClick={handleSave} style={{ padding: '6px 14px', borderRadius: 7, fontSize: 12, cursor: 'pointer', background: 'var(--gold)', color: 'var(--gold-ink)', border: 'none', fontFamily: 'var(--f-sub)', fontWeight: 700 }}>
-              Guardar
-            </button>
-            <button onClick={() => setEditing(false)} style={{ padding: '6px 12px', borderRadius: 7, fontSize: 12, cursor: 'pointer', background: 'rgba(246,239,217,.07)', color: 'rgba(246,239,217,.6)', border: 'none', fontFamily: 'var(--f-mono)' }}>
-              Cancelar
-            </button>
-          </>
-        ) : (
-          <button
-            onClick={() => setEditing(true)}
-            style={{ padding: '6px 14px', borderRadius: 7, fontSize: 12, cursor: 'pointer', background: 'rgba(246,239,217,.07)', color: 'rgba(246,239,217,.6)', border: '1px solid rgba(246,239,217,.12)', fontFamily: 'var(--f-mono)' }}
-          >
-            Editar
-          </button>
-        )}
-      </div>
+      ) : <div style={{ fontFamily: 'var(--f-mono)', fontSize: 11, opacity: .4 }}>{match.phase || match.stadium || match.city || '—'}</div>}
+      {editing ? <button onClick={save}>Guardar</button> : <button onClick={() => setEditing(true)}>Editar</button>}
     </div>
   )
 }
 
-// ─── AdminMatches ─────────────────────────────────────────────────────────────
 export default function AdminMatches() {
-  const [matches, setMatches] = useState(initialMatches)
-  const [filter, setFilter]  = useState('all')
+  const [matches, setMatches] = useState([])
+  const [filter, setFilter] = useState('all')
+  const [loading, setLoading] = useState(true)
+  const [error, setError] = useState('')
 
-  const filtered = filter === 'all' ? matches : matches.filter(m => m.status === filter)
+  async function load() {
+    try {
+      setLoading(true); setError('')
+      const data = await adminService.getMatches()
+      setMatches(Array.isArray(data) ? data : [])
+    } catch (err) { setError(err.message) }
+    finally { setLoading(false) }
+  }
 
-  function handleSave(id, { homeScore, awayScore, status }) {
-    setMatches(ms => ms.map(m => m.id !== id ? m : { ...m, status, homeScore, awayScore }))
+  useEffect(() => { load() }, [])
+
+  const filtered = useMemo(() => filter === 'all' ? matches : matches.filter(m => m.status === filter), [matches, filter])
+
+  async function handleSave(id, patch) {
+    try {
+      const updated = await adminService.updateMatch(id, patch)
+      setMatches(list => list.map(m => m.id === id ? { ...m, ...updated } : m))
+    } catch (err) {
+      alert(`No se pudo actualizar: ${err.message}`)
+    }
   }
 
   return (
     <div style={{ padding: 32, maxWidth: 900, margin: '0 auto' }}>
-
       <div style={{ marginBottom: 28 }}>
-        <h1 style={{ fontFamily: 'var(--f-display)', fontSize: 48, lineHeight: .85, margin: '0 0 6px', color: 'var(--paper)', textTransform: 'uppercase' }}>
-          Partidos
-        </h1>
-        <p style={{ fontFamily: 'var(--f-mono)', fontSize: 12, opacity: .4, margin: 0, letterSpacing: '.06em' }}>
-          Cargá resultados y actualizá el estado de cada partido en tiempo real.
-        </p>
+        <h1 style={{ fontFamily: 'var(--f-display)', fontSize: 48, lineHeight: .85, margin: '0 0 6px', color: 'var(--paper)', textTransform: 'uppercase' }}>Partidos</h1>
+        <p style={{ fontFamily: 'var(--f-mono)', fontSize: 12, opacity: .4, margin: 0, letterSpacing: '.06em' }}>Datos tomados del backend y MySQL.</p>
       </div>
-
-      {/* Filter tabs */}
       <div style={{ display: 'flex', gap: 6, marginBottom: 20 }}>
-        {[['all','Todos'],['live','En vivo'],['upcoming','Programados'],['final','Finalizados']].map(([v, l]) => (
-          <button
-            key={v}
-            onClick={() => setFilter(v)}
-            style={{
-              padding: '7px 14px', borderRadius: 8, fontSize: 12, cursor: 'pointer',
-              background: filter === v ? 'var(--gold)' : 'rgba(246,239,217,0.06)',
-              color: filter === v ? 'var(--gold-ink)' : 'rgba(246,239,217,.6)',
-              border: 'none', fontFamily: 'var(--f-sub)', fontWeight: 700,
-              letterSpacing: '.04em',
-            }}
-          >
-            {l}
-          </button>
-        ))}
-        <span style={{ marginLeft: 'auto', fontFamily: 'var(--f-mono)', fontSize: 11, opacity: .3, color: 'var(--paper)', alignSelf: 'center' }}>
-          {filtered.length} partido{filtered.length !== 1 ? 's' : ''}
-        </span>
+        {[['all','Todos'],['live','En vivo'],['upcoming','Programados'],['final','Finalizados']].map(([v, l]) => <button key={v} onClick={() => setFilter(v)} style={{ padding: '7px 14px', borderRadius: 8, background: filter === v ? 'var(--gold)' : 'rgba(246,239,217,.06)', color: filter === v ? 'var(--gold-ink)' : 'rgba(246,239,217,.6)', border: 'none' }}>{l}</button>)}
+        <span style={{ marginLeft: 'auto', color: 'var(--paper)', opacity: .35 }}>{filtered.length} partidos</span>
       </div>
-
-      {/* Match list */}
+      {loading && <p style={{ color: 'var(--paper)', opacity: .5 }}>Cargando partidos...</p>}
+      {error && <p style={{ color: 'var(--red)' }}>Error: {error}</p>}
       <div style={{ borderRadius: 12, border: '1px solid rgba(246,239,217,0.08)', overflow: 'hidden' }}>
-        {filtered.map(m => (
-          <MatchRow key={m.id} match={m} onSave={handleSave} />
-        ))}
-        {filtered.length === 0 && (
-          <div style={{ padding: '40px 20px', textAlign: 'center', fontFamily: 'var(--f-mono)', fontSize: 13, opacity: .3, color: 'var(--paper)' }}>
-            No hay partidos con este filtro.
-          </div>
-        )}
+        {filtered.map(m => <MatchRow key={m.id} match={m} onSave={handleSave} />)}
+        {!filtered.length && !loading && <div style={{ padding: 40, color: 'var(--paper)', opacity: .4, textAlign: 'center' }}>No hay partidos.</div>}
       </div>
     </div>
   )

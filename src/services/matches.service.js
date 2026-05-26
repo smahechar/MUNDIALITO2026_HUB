@@ -7,7 +7,7 @@ import { getMatchDetail } from '@/mocks/data/matchDetail'
 export const matchesService = {
   getAll:      (filters = {}) => ENV.USE_MOCKS
     ? Promise.resolve(filters.status ? matches.filter(m => m.status === filters.status) : matches)
-    : apiFetch('/matches', { method: 'GET' }),
+    : apiFetch(`/matches${filters.status ? `?status=${encodeURIComponent(filters.status)}` : ''}`, { method: 'GET' }),
 
   getById:     (id) => ENV.USE_MOCKS
     ? Promise.resolve(matches.find(m => m.id === id) ?? null)

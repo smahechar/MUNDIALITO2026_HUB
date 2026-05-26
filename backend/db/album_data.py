@@ -1,232 +1,221 @@
-"""
-Capa de acceso al álbum digital — PostgreSQL via SQLAlchemy.
-"""
-
 import random
 import uuid
 from datetime import datetime, timezone
 
 from db.database import SessionLocal
-from db.models import Sticker, UserSticker, Trade, User
-
-# ─── Catálogo estático de plantilla de láminas ────────────────────────────────
-_TEMPLATE = [
-    (1,  "Escudo",        "badge",   "C"),
-    (2,  "Portero",       "player",  "C"),
-    (3,  "Defensa #1",    "player",  "C"),
-    (4,  "Defensa #2",    "player",  "C"),
-    (5,  "Mediocampista", "player",  "R"),
-    (6,  "Capitan",       "player",  "E"),
-    (7,  "Delantero #1",  "player",  "R"),
-    (8,  "Delantero #2",  "player",  "C"),
-    (9,  "Estadio",       "stadium", "R"),
-    (10, "Kit local",     "kit",     "C"),
-    (11, "Kit visitante", "kit",     "C"),
-    (12, "MOMENTO",       "moment",  "L"),
-]
-
-_RARITY_WEIGHT = {"C": 60, "R": 25, "E": 12, "L": 3}
-ALBUM_TOTAL = 288  # 24 naciones × 12 slots
+from db.models import Sticker, UserSticker, User, Nation, Trade
 
 
-# ─── Helpers ──────────────────────────────────────────────────────────────────
-
-def _sticker_to_dict(s: Sticker, count: int = 0) -> dict:
-    return {
-        "id":        s.id,
-        "num":       s.num,
-        "nation":    s.nation,
-        "slot":      s.slot,
-        "name":      s.name,
-        "shortName": s.short_name,
-        "type":      s.type,
-        "rarity":    s.rarity,
-        "owned":     count > 0,
-        "count":     count,
-    }
+def _get_user(db, email):
+    return db.query(User).filter(User.email == email.lower()).first()
 
 
-def _compute_stats(collection: dict[str, int], nations_codes: list[str]) -> dict:
-    owned  = sum(1 for c in collection.values() if c > 0)
-    dupes  = sum(1 for c in collection.values() if c > 1)
-    sets   = sum(
-        1 for code in nations_codes
-        if all(collection.get(f"{code}-{str(s).zfill(2)}", 0) > 0 for s, *_ in _TEMPLATE)
-    )
-    return {
-        "total":        ALBUM_TOTAL,
-        "owned":        owned,
-        "duplicates":   dupes,
-        "missing":      ALBUM_TOTAL - owned,
-        "pct":          round(owned / ALBUM_TOTAL * 100) if ALBUM_TOTAL else 0,
-        "setsComplete": sets,
-    }
-
-
-def _get_collection(db, user_id: str) -> dict[str, int]:
-    """Devuelve {sticker_id: count} para un usuario."""
-    rows = db.query(UserSticker).filter(UserSticker.user_id == user_id).all()
-    return {r.sticker_id: r.count for r in rows}
-
-
-def _get_nations_codes(db) -> list[str]:
-    from db.models import Nation
-    return [n.code for n in db.query(Nation).order_by(Nation.code).all()]
-
-
-# ─── Funciones de acceso ──────────────────────────────────────────────────────
-
-def get_album(email: str) -> dict:
-    """SELECT stickers + user_stickers JOIN WHERE user.email = :email"""
-    with SessionLocal() as db:
-        user = db.query(User).filter(User.email == email.lower()).first()
+def get_album(email: str):
+    db = SessionLocal()
+    try:
+        user = _get_user(db, email)
         if not user:
-            return {"stickers": [], "stats": {}}
+            return {
+                "total": 0,
+                "owned": 0,
+                "duplicates": 0,
+                "stickers": [],
+                "nations": [],
+            }
 
-        col    = _get_collection(db, user.id)
-        all_s  = db.query(Sticker).order_by(Sticker.num).all()
-        codes  = _get_nations_codes(db)
+        stickers = db.query(Sticker).all()
+        owned_rows = (
+            db.query(UserSticker)
+            .filter(UserSticker.user_id == user.id)
+            .all()
+        )
 
-        stickers = [_sticker_to_dict(s, col.get(s.id, 0)) for s in all_s]
-        return {"stickers": stickers, "stats": _compute_stats(col, codes)}
+        owned_map = {row.sticker_id: row.count for row in owned_rows}
+
+        total = len(stickers)
+        owned = sum(1 for s in stickers if owned_map.get(s.id, 0) > 0)
+        duplicates = sum(max(count - 1, 0) for count in owned_map.values())
+
+        sticker_items = []
+        for s in stickers:
+            count = owned_map.get(s.id, 0)
+            sticker_items.append({
+                "id": s.id,
+                "num": s.num,
+                "nation": s.nation,
+                "slot": s.slot,
+                "name": s.name,
+                "shortName": s.short_name,
+                "type": s.type,
+                "rarity": s.rarity,
+                "count": count,
+                "owned": count > 0,
+                "duplicate": count > 1,
+            })
+
+        nations = db.query(Nation).all()
+        nation_items = []
+
+        for n in nations:
+            nation_stickers = [s for s in stickers if s.nation == n.code]
+            nation_total = len(nation_stickers)
+            nation_owned = sum(
+                1 for s in nation_stickers
+                if owned_map.get(s.id, 0) > 0
+            )
+
+            nation_items.append({
+                "code": n.code,
+                "name": n.name,
+                "total": nation_total,
+                "owned": nation_owned,
+                "percent": round((nation_owned / nation_total) * 100) if nation_total else 0,
+            })
+
+        return {
+            "total": total,
+            "owned": owned,
+            "duplicates": duplicates,
+            "percent": round((owned / total) * 100) if total else 0,
+            "stickers": sticker_items,
+            "nations": nation_items,
+        }
+
+    finally:
+        db.close()
 
 
-def open_pack(email: str) -> dict:
-    """
-    Abre un sobre de 5 láminas únicas.
-    - Garantiza ≥1 lámina R/E/L.
-    - Prioriza láminas faltantes (70% del tiempo).
-    Actualiza user_stickers en BD.
-    """
-    with SessionLocal() as db:
-        user = db.query(User).filter(User.email == email.lower()).first()
+def open_pack(email: str):
+    db = SessionLocal()
+    try:
+        user = _get_user(db, email)
         if not user:
-            return {"stickers": [], "stats": {}}
+            return {"detail": "Usuario no encontrado"}, 404
 
-        col    = _get_collection(db, user.id)
-        all_s  = db.query(Sticker).all()
-        missing = [s for s in all_s if col.get(s.id, 0) == 0]
-        pack:   list[Sticker] = []
-        used:   set[str]      = set()
+        stickers = db.query(Sticker).all()
+        if not stickers:
+            return {"detail": "No hay stickers cargados"}, 400
 
-        # Lámina 1: rareza garantizada, preferir faltantes
-        rare_missing = [s for s in missing if s.rarity != "C"]
-        rare_pool    = rare_missing if rare_missing else [s for s in all_s if s.rarity != "C"]
-        first = random.choice(rare_pool)
-        pack.append(first)
-        used.add(first.id)
+        selected = random.sample(stickers, min(5, len(stickers)))
+        result = []
 
-        # Láminas 2-5
-        for _ in range(4):
-            avail_missing = [s for s in missing if s.id not in used]
-            if avail_missing and random.random() < 0.7:
-                pick = random.choices(
-                    avail_missing,
-                    weights=[_RARITY_WEIGHT[s.rarity] for s in avail_missing], k=1
-                )[0]
-            else:
-                avail_all = [s for s in all_s if s.id not in used]
-                pick = random.choices(
-                    avail_all,
-                    weights=[_RARITY_WEIGHT[s.rarity] for s in avail_all], k=1
-                )[0]
-            pack.append(pick)
-            used.add(pick.id)
+        for s in selected:
+            row = (
+                db.query(UserSticker)
+                .filter(
+                    UserSticker.user_id == user.id,
+                    UserSticker.sticker_id == s.id,
+                )
+                .first()
+            )
 
-        # Persistir en user_stickers
-        for s in pack:
-            row = db.query(UserSticker).filter(
-                UserSticker.user_id == user.id,
-                UserSticker.sticker_id == s.id,
-            ).first()
+            is_new = False
+
             if row:
-                row.count      += 1
-                row.updated_at  = datetime.now(timezone.utc)
+                row.count += 1
+                row.updated_at = datetime.now(timezone.utc)
             else:
-                db.add(UserSticker(user_id=user.id, sticker_id=s.id, count=1))
+                row = UserSticker(
+                    id=str(uuid.uuid4()),
+                    user_id=user.id,
+                    sticker_id=s.id,
+                    count=1,
+                    updated_at=datetime.now(timezone.utc),
+                )
+                db.add(row)
+                is_new = True
+
+            result.append({
+                "id": s.id,
+                "num": s.num,
+                "nation": s.nation,
+                "name": s.name,
+                "shortName": s.short_name,
+                "type": s.type,
+                "rarity": s.rarity,
+                "isNew": is_new,
+                "count": row.count,
+            })
 
         db.commit()
 
-        # Recargar colección para stats actualizadas
-        col_updated = _get_collection(db, user.id)
-        codes       = _get_nations_codes(db)
-
         return {
-            "stickers": [_sticker_to_dict(s, col_updated.get(s.id, 0)) for s in pack],
-            "stats":    _compute_stats(col_updated, codes),
+            "success": True,
+            "stickers": result,
         }
 
+    except Exception as e:
+        db.rollback()
+        return {"detail": str(e)}, 500
 
-def get_offers(email: str) -> list:
-    """SELECT * FROM trades WHERE proposer_id = :uid OR receiver_id = :uid"""
-    with SessionLocal() as db:
-        user = db.query(User).filter(User.email == email.lower()).first()
+    finally:
+        db.close()
+
+
+def get_offers(email: str):
+    db = SessionLocal()
+    try:
+        user = _get_user(db, email)
         if not user:
             return []
-        trades = db.query(Trade).filter(
-            (Trade.proposer_id == user.id) | (Trade.receiver_id == user.id)
-        ).order_by(Trade.created_at.desc()).all()
-        return [_trade_to_dict(t, user.id) for t in trades]
+
+        trades = (
+            db.query(Trade)
+            .filter(
+                (Trade.proposer_id == user.id) |
+                (Trade.receiver_id == user.id)
+            )
+            .all()
+        )
+
+        return [
+            {
+                "id": t.id,
+                "proposerId": t.proposer_id,
+                "receiverId": t.receiver_id,
+                "offered": t.offered,
+                "requested": t.requested,
+                "status": t.status,
+                "createdAt": t.created_at.isoformat() if t.created_at else None,
+                "updatedAt": t.updated_at.isoformat() if t.updated_at else None,
+            }
+            for t in trades
+        ]
+
+    finally:
+        db.close()
 
 
-def _trade_to_dict(t: Trade, viewer_id: str | None = None) -> dict:
-    return {
-        "id":           t.id,
-        "proposerId":   t.proposer_id,
-        "proposerName": t.proposer.name if t.proposer else "—",
-        "receiverId":   t.receiver_id,
-        "offered":      t.offered or [],
-        "requested":    t.requested or [],
-        "status":       t.status,
-        "isYours":      t.proposer_id == viewer_id,
-        "createdAt":    t.created_at.isoformat() if t.created_at else None,
-    }
-
-
-def create_trade(email: str, body: dict) -> tuple[dict | None, str | None]:
-    """INSERT INTO trades ..."""
-    offered   = body.get("offered", [])
-    requested = body.get("requested", [])
-
-    if not offered or not requested:
-        return None, "El intercambio debe incluir láminas ofrecidas y solicitadas"
-
-    with SessionLocal() as db:
-        user = db.query(User).filter(User.email == email.lower()).first()
+def create_trade(email: str, payload: dict):
+    db = SessionLocal()
+    try:
+        user = _get_user(db, email)
         if not user:
-            return None, "Usuario no encontrado"
-
-        # Validar que las láminas existen
-        all_ids = set(s.id for s in db.query(Sticker.id).all())
-        invalid = [sid for sid in offered + requested if sid not in all_ids]
-        if invalid:
-            return None, f"Láminas no encontradas: {', '.join(invalid)}"
-
-        # Verificar que el usuario tiene las láminas que ofrece
-        col          = _get_collection(db, user.id)
-        missing_own  = [sid for sid in offered if col.get(sid, 0) == 0]
-        if missing_own:
-            return None, "No tenés las láminas que querés ofrecer"
-
-        # Resolver receiver por handle si viene en el body
-        receiver_id = None
-        receiver_handle = body.get("receiverHandle")
-        if receiver_handle:
-            h     = receiver_handle if receiver_handle.startswith("@") else f"@{receiver_handle}"
-            other = db.query(User).filter(User.handle == h).first()
-            if not other:
-                return None, f"Usuario {receiver_handle} no encontrado"
-            receiver_id = other.id
+            return {"detail": "Usuario no encontrado"}, 404
 
         trade = Trade(
             id=str(uuid.uuid4()),
             proposer_id=user.id,
-            receiver_id=receiver_id,
-            offered=offered,
-            requested=requested,
+            receiver_id=payload.get("receiverId"),
+            offered=payload.get("offered", []),
+            requested=payload.get("requested", []),
             status="pending",
+            created_at=datetime.now(timezone.utc),
+            updated_at=datetime.now(timezone.utc),
         )
+
         db.add(trade)
         db.commit()
-        db.refresh(trade)
-        return _trade_to_dict(trade, user.id), None
+
+        return {
+            "success": True,
+            "id": trade.id,
+            "status": trade.status,
+        }
+
+    except Exception as e:
+        db.rollback()
+        return {"detail": str(e)}, 500
+
+    finally:
+        db.close()

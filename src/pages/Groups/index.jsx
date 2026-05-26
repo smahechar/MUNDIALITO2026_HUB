@@ -36,25 +36,49 @@ function fgFor(type) {
 }
 
 // ─── MemberStack · overlapping avatars ────────────────────────────────────────
-function MemberStack({ members, total }) {
-  const shown = members.slice(0, 4)
+function MemberStack({ members = [] }) {
+  const list = Array.isArray(members) ? members : []
+
   return (
-    <div className="gc-row" style={{ alignItems: 'center' }}>
-      {shown.map((m, i) => (
-        <div key={m.id} style={{
-          width: 28, height: 28, borderRadius: 999,
-          border: '2px solid var(--paper)',
-          background: m.isYou ? 'var(--gold)' : 'var(--ink)',
-          color: m.isYou ? 'var(--gold-ink)' : 'var(--paper)',
-          display: 'flex', alignItems: 'center', justifyContent: 'center',
-          fontFamily: 'var(--f-sub)', fontWeight: 800, fontSize: 10,
-          marginLeft: i > 0 ? -8 : 0, position: 'relative', zIndex: shown.length - i,
-        }}>{m.avatar}</div>
+    <div className="gc-row" style={{ gap: -6 }}>
+      {list.slice(0, 4).map((m, index) => (
+        <div
+          key={m.id || index}
+          title={m.name || "Miembro"}
+          style={{
+            width: 28,
+            height: 28,
+            borderRadius: "50%",
+            background: "var(--paper-2)",
+            border: "1px solid var(--line)",
+            display: "grid",
+            placeItems: "center",
+            fontSize: 11,
+            fontWeight: 800,
+            marginLeft: index === 0 ? 0 : -6,
+          }}
+        >
+          {m.avatar || m.avatarInitial || m.name?.[0]?.toUpperCase() || "?"}
+        </div>
       ))}
-      {total > shown.length && (
-        <span style={{ fontSize: 11, color: 'var(--ink-2)', marginLeft: 6, fontFamily: 'var(--f-mono)' }}>
-          +{total - shown.length}
-        </span>
+
+      {list.length > 4 && (
+        <div
+          style={{
+            width: 28,
+            height: 28,
+            borderRadius: "50%",
+            background: "var(--ink)",
+            color: "var(--paper)",
+            display: "grid",
+            placeItems: "center",
+            fontSize: 10,
+            fontWeight: 800,
+            marginLeft: -6,
+          }}
+        >
+          +{list.length - 4}
+        </div>
       )}
     </div>
   )
@@ -130,7 +154,7 @@ function GroupCard({ group, onExpand }) {
 
         {/* Footer */}
         <div className="gc-row" style={{ justifyContent: 'space-between', alignItems: 'center' }}>
-          <MemberStack members={group.memberList} total={group.members} />
+          <MemberStack members={group.memberList || group.membersList || []} />
           <div className="gc-row gc-gap-sm" style={{ alignItems: 'center' }}>
             <span className="gc-mono" style={{ fontSize: 10, opacity: .55 }}>📍 {group.city}</span>
             <span style={{ color: 'var(--muted)', fontSize: 12, fontFamily: 'var(--f-sub)', fontWeight: 700, letterSpacing: '.06em' }}>VER GRUPO →</span>

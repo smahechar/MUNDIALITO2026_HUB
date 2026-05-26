@@ -536,3 +536,166 @@ def leave_group(group_id: str, user_email_or_id: str):
 
     finally:
         db.close()
+
+# ──────────────────────────────────────────────────────────────────────────────
+# Compatibilidad final con backend/routers/groups.py
+# Estas definiciones quedan al final para asegurar que la firma coincida con:
+#   get_group(group_id, email)
+#   get_activity(group_id, email) -> (entries, error)
+#   join_group(email, current_user, code)
+#   leave_group(email, group_id)
+# ──────────────────────────────────────────────────────────────────────────────
+
+def get_group(group_id: str, user_email_or_id: str | None = None):
+    from db.database import SessionLocal
+    from db.models import Group, GroupMember
+
+    db = SessionLocal()
+    try:
+        group = db.query(Group).filter(Group.id == group_id).first()
+        if not group:
+            return None
+
+        if user_email_or_id:
+            user = _get_user_by_email_or_id(db, user_email_or_id)
+            if user:
+                is_member = db.query(GroupMember).filter(
+                    GroupMember.group_id == group.id,
+                    GroupMember.user_id == user.id,
+                ).first()
+                if not is_member and not group.is_open:
+                    return None
+
+        return _group_to_dict(group, user_email_or_id)
+    finally:
+        db.close()
+
+
+def get_activity(group_id: str, user_email_or_id: str | None = None):
+    from db.database import SessionLocal
+    from db.models import Group, GroupMember, GroupActivity, User
+
+    db = SessionLocal()
+    try:
+        group = db.query(Group).filter(Group.id == group_id).first()
+        if not group:
+            return None, "Grupo no encontrado"
+
+        if user_email_or_id:
+            user = _get_user_by_email_or_id(db, user_email_or_id)
+            if not user:
+                return None, "Usuario no encontrado"
+            member = db.query(GroupMember).filter(
+                GroupMember.group_id == group.id,
+                GroupMember.user_id == user.id,
+            ).first()
+            if not member and not group.is_open:
+                return None, "No eres miembro de este grupo"
+
+        rows = (
+            db.query(GroupActivity, User)
+            .outerjoin(User, User.id == GroupActivity.user_id)
+            .filter(GroupActivity.group_id == group_id)
+            .order_by(GroupActivity.created_at.desc())
+            .limit(50)
+            .all()
+        )
+
+        return [
+            {
+                "id": a.id,
+                "groupId": a.group_id,
+                "userId": a.user_id,
+                "userName": u.name if u else None,
+                "userHandle": u.handle if u else None,
+                "type": a.type,
+                "text": a.text,
+                "createdAt": a.created_at.isoformat() if a.created_at else None,
+            }
+            for a, u in rows
+        ], None
+    finally:
+        db.close()
+
+
+def join_group(user_email_or_id: str, current_user=None, code_or_group_id: str | None = None):
+    from db.database import SessionLocal
+    from db.models import Group, GroupMember, GroupActivity
+
+    db = SessionLocal()
+    try:
+        user = _get_user_by_email_or_id(db, user_email_or_id)
+        if not user:
+            return None, "Usuario no encontrado"
+
+        if not code_or_group_id:
+            return None, "Código de grupo requerido"
+
+        code_or_group_id = code_or_group_id.strip()
+        group = (
+            db.query(Group)
+            .filter((Group.code == code_or_group_id.upper()) | (Group.id == code_or_group_id))
+            .first()
+        )
+        if not group:
+            return None, "Grupo no encontrado"
+
+        existing = db.query(GroupMember).filter(
+            GroupMember.group_id == group.id,
+            GroupMember.user_id == user.id,
+        ).first()
+
+        if not existing:
+            db.add(GroupMember(group_id=group.id, user_id=user.id, role="member", pts=0))
+            db.add(GroupActivity(
+                group_id=group.id,
+                user_id=user.id,
+                type="join",
+                text=f"{user.name} se unió al grupo.",
+            ))
+            db.commit()
+            db.refresh(group)
+
+        return _group_to_dict(group, user.email), None
+    except Exception as e:
+        db.rollback()
+        return None, str(e)
+    finally:
+        db.close()
+
+
+def leave_group(user_email_or_id: str, group_id: str):
+    from db.database import SessionLocal
+    from db.models import Group, GroupMember, GroupActivity
+
+    db = SessionLocal()
+    try:
+        user = _get_user_by_email_or_id(db, user_email_or_id)
+        if not user:
+            return False, "Usuario no encontrado"
+
+        group = db.query(Group).filter(Group.id == group_id).first()
+        if not group:
+            return False, "Grupo no encontrado"
+
+        member = db.query(GroupMember).filter(
+            GroupMember.group_id == group.id,
+            GroupMember.user_id == user.id,
+        ).first()
+        if not member:
+            return False, "No eres miembro de este grupo"
+
+        db.delete(member)
+        db.add(GroupActivity(
+            group_id=group.id,
+            user_id=user.id,
+            type="leave",
+            text=f"{user.name} abandonó el grupo.",
+        ))
+        db.commit()
+        return True, None
+    except Exception as e:
+        db.rollback()
+        return False, str(e)
+    finally:
+        db.close()
