@@ -9,7 +9,7 @@ import uuid
 from datetime import datetime, timezone, timedelta
 
 from db.database import SessionLocal
-from db.models import Ticket, TicketEvent, Match, User, PaymentRecord
+from db.models import Ticket, TicketEvent, Match, User, PaymentRecord, Nation
 from db.notifications_data import notify_user, notify_handle
 from db.antifraud import (
     enforce_reservation_limit, enforce_transfer_limit, enforce_refund_limit,
@@ -46,13 +46,17 @@ def _aware(dt: datetime | None) -> datetime | None:
     return dt.replace(tzinfo=timezone.utc)
 
 
-def _ticket_to_dict(t: Ticket) -> dict:
+def _ticket_to_dict(t: Ticket, db=None) -> dict:
+    sector = _SECTOR_BY_ID.get(t.sector_id, {})
+
     return {
         "id":            t.id,
         "userEmail":     t.user.email if t.user else None,
         "matchId":       t.match_id,
+        "match":         _match_to_dict(db, t.match) if db else None,
         "status":        t.status,
         "sector":        t.sector_id,
+        "sectorName":    sector.get("name", t.sector_id),
         "seatRow":       t.seat_row,
         "seatNum":       t.seat_num,
         "reservedAt":    t.reserved_at.isoformat()  if t.reserved_at  else None,
@@ -91,6 +95,28 @@ def _gen_ticket_id(db) -> str:
             return tid
     return f"T-{uuid.uuid4().hex[:8].upper()}"
 
+def _match_to_dict(db, m: Match | None) -> dict | None:
+    if not m:
+        return None
+
+    nations = {
+        n.code: n.name
+        for n in db.query(Nation).filter(Nation.code.in_([m.home, m.away])).all()
+    }
+
+    return {
+        "id": m.id,
+        "home": m.home,
+        "away": m.away,
+        "homeName": nations.get(m.home, m.home),
+        "awayName": nations.get(m.away, m.away),
+        "group": m.group_name,
+        "stadium": m.stadium,
+        "city": m.city,
+        "phase": m.phase,
+        "status": m.status,
+        "kickoff": m.kickoff.isoformat() if m.kickoff else None,
+    }
 
 # ─── Funciones de acceso ──────────────────────────────────────────────────────
 
@@ -114,7 +140,7 @@ def get_user_tickets(email: str) -> list:
             .order_by(Ticket.reserved_at.desc())
             .all()
         )
-        return [_ticket_to_dict(t) for t in tickets]
+        return [_ticket_to_dict(t, db) for t in tickets]
 
 
 def get_ticket(ticket_id: str, email: str) -> dict | None:
@@ -126,7 +152,7 @@ def get_ticket(ticket_id: str, email: str) -> dict | None:
             Ticket.id == ticket_id,
             Ticket.user_id == user.id,
         ).first()
-        return _ticket_to_dict(t) if t else None
+        return _ticket_to_dict(t, db) if t else None
 
 
 def get_available() -> list:
@@ -137,15 +163,18 @@ def get_available() -> list:
             .order_by(Match.kickoff)
             .all()
         )
-        prices       = [72, 98, 145, 145, 380]
-        demand_opts  = ["high", "medium", "low"]
-        remain_opts  = [820, 412, 1240, 64, 2810, 198]
+
+        prices = [72, 98, 145, 145, 380]
+        demand_opts = ["high", "medium", "low"]
+        remain_opts = [820, 412, 1240, 64, 2810, 198]
+
         return [
             {
-                "matchId":   m.id,
-                "fromUSD":   prices[i % len(prices)],
+                "matchId": m.id,
+                "match": _match_to_dict(db, m),
+                "fromUSD": prices[i % len(prices)],
                 "remaining": remain_opts[i % len(remain_opts)],
-                "demand":    demand_opts[i % len(demand_opts)],
+                "demand": demand_opts[i % len(demand_opts)],
             }
             for i, m in enumerate(upcoming)
         ]
@@ -225,7 +254,7 @@ def reserve_ticket(email: str, body: dict) -> tuple[dict | None, str | None]:
         )
         db.commit()
         db.refresh(ticket)
-        return _ticket_to_dict(ticket), None
+        return _ticket_to_dict(ticket, db), None
 
 
 def confirm_ticket(
@@ -336,7 +365,7 @@ def confirm_ticket(
                 "last4":      result.last4,
             },
         )
-        return _ticket_to_dict(t), None
+        return _ticket_to_dict(t, db), None
 
 
 def transfer_ticket(ticket_id: str, email: str, handle: str) -> tuple[dict | None, str | None]:
@@ -404,7 +433,7 @@ def transfer_ticket(ticket_id: str, email: str, handle: str) -> tuple[dict | Non
             correlation_id=t.correlation_id,
             meta={"ticketId": t.id, "from": user.handle},
         )
-        return _ticket_to_dict(t), None
+        return _ticket_to_dict(t, db)
 
 
 def refund_ticket(ticket_id: str, email: str) -> tuple[dict | None, str | None]:
@@ -451,7 +480,7 @@ def refund_ticket(ticket_id: str, email: str) -> tuple[dict | None, str | None]:
             correlation_id=t.correlation_id,
             meta={"ticketId": t.id, "amountUSD": t.price_usd},
         )
-        return _ticket_to_dict(t), None
+        return _ticket_to_dict(t, db)
 
 
 # ─── Scheduler: expiración global de reservas ─────────────────────────────────
