@@ -7,21 +7,68 @@ import { groupsService } from '@/services/groups.service'
 
 // ─── StatTilePro ──────────────────────────────────────────────────────────────
 function StatTilePro({ label, value, change, tone = 'paper' }) {
-  const v = useCountUp(typeof value === 'number' ? value : 0, 1400)
-  const display = typeof value === 'number' ? Math.round(v) : value
+  const numericValue = Number.isFinite(Number(value)) ? Number(value) : 0
+  const v = useCountUp(numericValue, 1400)
+  const display = Math.round(v)
+
   const styles = {
-    paper: { bg: 'var(--paper)',   fg: 'var(--ink)',       border: '1px solid var(--rule)' },
-    ink:   { bg: 'var(--ink)',     fg: 'var(--paper)',     border: 'transparent' },
-    green: { bg: 'var(--green)',   fg: 'var(--green-ink)', border: 'transparent' },
-    gold:  { bg: 'var(--gold)',    fg: 'var(--gold-ink)',  border: 'transparent' },
+    paper: { bg: 'var(--paper)', fg: 'var(--ink)', border: '1px solid var(--rule)' },
+    ink: { bg: 'var(--ink)', fg: 'var(--paper)', border: 'transparent' },
+    green: { bg: 'var(--green)', fg: 'var(--green-ink)', border: 'transparent' },
+    gold: { bg: 'var(--gold)', fg: 'var(--gold-ink)', border: 'transparent' },
   }[tone] || { bg: 'var(--paper)', fg: 'var(--ink)', border: '1px solid var(--rule)' }
 
   return (
-    <div className="gc-card gc-hover" style={{ background: styles.bg, color: styles.fg, padding: 24, borderColor: styles.border, position: 'relative', overflow: 'hidden' }}>
-      <div style={{ position: 'absolute', inset: 0, pointerEvents: 'none', background: `radial-gradient(circle at 100% 0%, ${tone === 'ink' ? 'rgba(247,241,223,.06)' : 'rgba(255,255,255,.18)'}, transparent 60%)` }} />
-      <Eyebrow style={{ color: styles.fg, opacity: .7, position: 'relative' }}>{label}</Eyebrow>
-      <div style={{ fontFamily: 'var(--f-display)', fontSize: 64, marginTop: 10, lineHeight: .85, position: 'relative' }}>{display}</div>
-      <div className="gc-mono" style={{ fontSize: 11.5, marginTop: 12, opacity: .8, letterSpacing: '.06em', position: 'relative' }}>{change}</div>
+    <div
+      className="gc-card gc-hover"
+      style={{
+        background: styles.bg,
+        color: styles.fg,
+        padding: 24,
+        borderColor: styles.border,
+        position: 'relative',
+        overflow: 'hidden',
+      }}
+    >
+      <div
+        style={{
+          position: 'absolute',
+          inset: 0,
+          pointerEvents: 'none',
+          background: `radial-gradient(circle at 100% 0%, ${
+            tone === 'ink' ? 'rgba(247,241,223,.06)' : 'rgba(255,255,255,.18)'
+          }, transparent 60%)`,
+        }}
+      />
+
+      <Eyebrow style={{ color: styles.fg, opacity: 0.7, position: 'relative' }}>
+        {label}
+      </Eyebrow>
+
+      <div
+        style={{
+          fontFamily: 'var(--f-display)',
+          fontSize: 64,
+          marginTop: 10,
+          lineHeight: 0.85,
+          position: 'relative',
+        }}
+      >
+        {display}
+      </div>
+
+      <div
+        className="gc-mono"
+        style={{
+          fontSize: 11.5,
+          marginTop: 12,
+          opacity: 0.8,
+          letterSpacing: '.06em',
+          position: 'relative',
+        }}
+      >
+        {change}
+      </div>
     </div>
   )
 }
@@ -86,78 +133,216 @@ function MemberStack({ members = [] }) {
 
 // ─── GroupCard ────────────────────────────────────────────────────────────────
 function GroupCard({ group, onExpand }) {
-  const accent = accentFor(group.type)
-  const fg     = group.type === 'Familia' ? 'var(--gold-ink)' : group.type === 'Viajeros' ? 'var(--red-ink)' : 'var(--paper)'
+  const type = group.type || 'General'
+  const accent = accentFor(type)
+  const fg = type === 'Familia'
+    ? 'var(--gold-ink)'
+    : type === 'Viajeros'
+      ? 'var(--red-ink)'
+      : 'var(--paper)'
+
+  const membersCount = Number(group.members ?? group.memberCount ?? 0)
+  const sharedTickets = Number(group.sharedTickets ?? 0)
+  const activePredictions = Number(group.activePredictions ?? 0)
+
+  const memberList = Array.isArray(group.memberList)
+    ? group.memberList
+    : Array.isArray(group.membersList)
+      ? group.membersList
+      : Array.isArray(group.users)
+        ? group.users
+        : []
+
+  const avatarInitial =
+    group.avatarInitial ||
+    group.name?.[0]?.toUpperCase() ||
+    '?'
 
   return (
     <div
       className="gc-card gc-hover"
       onClick={onExpand}
-      style={{ position: 'relative', overflow: 'hidden', cursor: 'pointer', borderLeft: `4px solid ${accent}` }}
+      style={{
+        position: 'relative',
+        overflow: 'hidden',
+        cursor: 'pointer',
+        borderLeft: `4px solid ${accent}`,
+      }}
     >
-      {/* gradient accent */}
-      <div style={{
-        position: 'absolute', top: 0, right: 0, width: 260, height: 260,
-        background: `radial-gradient(circle at top right, color-mix(in oklab, ${accent} 14%, transparent), transparent 60%)`,
-        pointerEvents: 'none',
-      }} />
+      <div
+        style={{
+          position: 'absolute',
+          top: 0,
+          right: 0,
+          width: 260,
+          height: 260,
+          background: `radial-gradient(circle at top right, color-mix(in oklab, ${accent} 14%, transparent), transparent 60%)`,
+          pointerEvents: 'none',
+        }}
+      />
 
       <div style={{ padding: 24, position: 'relative' }}>
-        {/* Header row */}
-        <div className="gc-row" style={{ justifyContent: 'space-between', alignItems: 'flex-start', marginBottom: 14 }}>
+        <div
+          className="gc-row"
+          style={{
+            justifyContent: 'space-between',
+            alignItems: 'flex-start',
+            marginBottom: 14,
+          }}
+        >
           <div className="gc-row gc-gap-sm">
-            {/* Avatar */}
-            <div style={{
-              width: 48, height: 48, borderRadius: 12, flexShrink: 0,
-              background: accent, color: fg,
-              display: 'flex', alignItems: 'center', justifyContent: 'center',
-              fontFamily: 'var(--f-display)', fontSize: 22,
-            }}>{group.avatarInitial}</div>
+            <div
+              style={{
+                width: 48,
+                height: 48,
+                borderRadius: 12,
+                flexShrink: 0,
+                background: accent,
+                color: fg,
+                display: 'flex',
+                alignItems: 'center',
+                justifyContent: 'center',
+                fontFamily: 'var(--f-display)',
+                fontSize: 22,
+              }}
+            >
+              {avatarInitial}
+            </div>
+
             <div>
-              <h3 style={{ fontFamily: 'var(--f-display)', fontSize: 24, lineHeight: .9, margin: '0 0 5px' }}>{group.name}</h3>
+              <h3
+                style={{
+                  fontFamily: 'var(--f-display)',
+                  fontSize: 24,
+                  lineHeight: 0.9,
+                  margin: '0 0 5px',
+                }}
+              >
+                {group.name || 'Grupo sin nombre'}
+              </h3>
+
               <div className="gc-row gc-gap-sm">
-                <span className="gc-mono" style={{ fontSize: 10, opacity: .55, letterSpacing: '.1em' }}>{group.code}</span>
-                <span style={{
-                  padding: '2px 8px', borderRadius: 999,
-                  fontSize: 9, fontFamily: 'var(--f-sub)', fontWeight: 800, letterSpacing: '.07em', textTransform: 'uppercase',
-                  background: accent, color: fg,
-                }}>{group.type}</span>
+                <span
+                  className="gc-mono"
+                  style={{
+                    fontSize: 10,
+                    opacity: 0.55,
+                    letterSpacing: '.1em',
+                  }}
+                >
+                  {group.code || 'SIN-CODIGO'}
+                </span>
+
+                <span
+                  style={{
+                    padding: '2px 8px',
+                    borderRadius: 999,
+                    fontSize: 9,
+                    fontFamily: 'var(--f-sub)',
+                    fontWeight: 800,
+                    letterSpacing: '.07em',
+                    textTransform: 'uppercase',
+                    background: accent,
+                    color: fg,
+                  }}
+                >
+                  {type}
+                </span>
               </div>
             </div>
           </div>
 
           {group.yourRole === 'admin' && (
-            <span style={{
-              padding: '4px 10px', borderRadius: 999, fontSize: 9,
-              fontFamily: 'var(--f-sub)', fontWeight: 800, letterSpacing: '.07em', textTransform: 'uppercase',
-              background: 'var(--paper-2)', color: 'var(--muted)',
-            }}>ADMIN</span>
+            <span
+              style={{
+                padding: '4px 10px',
+                borderRadius: 999,
+                fontSize: 9,
+                fontFamily: 'var(--f-sub)',
+                fontWeight: 800,
+                letterSpacing: '.07em',
+                textTransform: 'uppercase',
+                background: 'var(--paper-2)',
+                color: 'var(--muted)',
+              }}
+            >
+              ADMIN
+            </span>
           )}
         </div>
 
-        {/* Description */}
-        <p style={{ fontSize: 13, color: 'var(--ink-2)', margin: '0 0 18px', lineHeight: 1.55 }}>{group.description}</p>
+        <p
+          style={{
+            fontSize: 13,
+            color: 'var(--ink-2)',
+            margin: '0 0 18px',
+            lineHeight: 1.55,
+          }}
+        >
+          {group.description || 'Sin descripción registrada.'}
+        </p>
 
-        {/* Stats */}
         <div className="gc-row" style={{ gap: 28, marginBottom: 18 }}>
           {[
-            { label: 'MIEMBROS',     val: group.members           },
-            { label: 'ENTRADAS',     val: group.sharedTickets     },
-            { label: 'PREDICCIONES', val: group.activePredictions },
+            { label: 'MIEMBROS', val: membersCount },
+            { label: 'ENTRADAS', val: sharedTickets },
+            { label: 'PREDICCIONES', val: activePredictions },
           ].map(s => (
             <div key={s.label}>
-              <div className="gc-mono" style={{ fontSize: 9, opacity: .5, letterSpacing: '.12em', textTransform: 'uppercase' }}>{s.label}</div>
-              <div style={{ fontFamily: 'var(--f-display)', fontSize: 34, lineHeight: .9, marginTop: 2 }}>{s.val}</div>
+              <div
+                className="gc-mono"
+                style={{
+                  fontSize: 9,
+                  opacity: 0.5,
+                  letterSpacing: '.12em',
+                  textTransform: 'uppercase',
+                }}
+              >
+                {s.label}
+              </div>
+
+              <div
+                style={{
+                  fontFamily: 'var(--f-display)',
+                  fontSize: 34,
+                  lineHeight: 0.9,
+                  marginTop: 2,
+                }}
+              >
+                {s.val}
+              </div>
             </div>
           ))}
         </div>
 
-        {/* Footer */}
-        <div className="gc-row" style={{ justifyContent: 'space-between', alignItems: 'center' }}>
-          <MemberStack members={group.memberList || group.membersList || []} />
+        <div
+          className="gc-row"
+          style={{
+            justifyContent: 'space-between',
+            alignItems: 'center',
+          }}
+        >
+          <MemberStack members={memberList} />
+
           <div className="gc-row gc-gap-sm" style={{ alignItems: 'center' }}>
-            <span className="gc-mono" style={{ fontSize: 10, opacity: .55 }}>📍 {group.city}</span>
-            <span style={{ color: 'var(--muted)', fontSize: 12, fontFamily: 'var(--f-sub)', fontWeight: 700, letterSpacing: '.06em' }}>VER GRUPO →</span>
+            <span
+              className="gc-mono"
+              style={{ fontSize: 10, opacity: 0.55 }}
+            >
+              📍 {group.city || 'Sin ciudad'}
+            </span>
+
+            <span
+              style={{
+                color: 'var(--muted)',
+                fontSize: 12,
+                fontFamily: 'var(--f-sub)',
+                fontWeight: 700,
+                letterSpacing: '.06em',
+              }}
+            >
+              VER GRUPO →
+            </span>
           </div>
         </div>
       </div>
@@ -210,124 +395,362 @@ function GroupDetailModal({ group, onClose }) {
   const [tab, setTab] = useState('members')
   const [activity, setActivity] = useState([])
   const [copied, setCopied] = useState(false)
-  const accent = accentFor(group.type)
-  const fg     = group.type === 'Familia' ? 'var(--gold-ink)' : 'var(--paper)'
+
+  const type = group.type || 'General'
+  const accent = accentFor(type)
+  const fg = type === 'Familia' ? 'var(--gold-ink)' : 'var(--paper)'
+
+  const memberList = Array.isArray(group.memberList)
+    ? group.memberList
+    : Array.isArray(group.membersList)
+      ? group.membersList
+      : Array.isArray(group.users)
+        ? group.users
+        : []
+
+  const sortedMembers = [...memberList].sort(
+    (a, b) => Number(b.pts ?? 0) - Number(a.pts ?? 0)
+  )
+
+  const avatarInitial =
+    group.avatarInitial ||
+    group.name?.[0]?.toUpperCase() ||
+    '?'
+
+  const membersCount = Number(
+    group.members ?? group.memberCount ?? sortedMembers.length ?? 0
+  )
 
   useEffect(() => {
-    groupsService.getActivity(group.id).then(setActivity)
+    let alive = true
+
+    async function loadActivity() {
+      try {
+        const data = await groupsService.getActivity(group.id)
+        if (alive) setActivity(Array.isArray(data) ? data : [])
+      } catch (err) {
+        console.error('Error cargando actividad del grupo:', err)
+        if (alive) setActivity([])
+      }
+    }
+
+    if (group.id) loadActivity()
+
+    return () => {
+      alive = false
+    }
   }, [group.id])
 
   function copyCode() {
-    navigator.clipboard?.writeText(group.code).catch(() => {})
+    navigator.clipboard?.writeText(group.code || '').catch(() => {})
     setCopied(true)
     setTimeout(() => setCopied(false), 1800)
   }
 
   const actIcons = { ticket: '🎫', prediction: '⚽', join: '👋' }
 
-  const sortedMembers = [...group.memberList].sort((a, b) => b.pts - a.pts)
-
   return (
     <ModalOverlay onClose={onClose} maxWidth={580}>
-      {/* Group hero */}
       <div style={{ display: 'flex', gap: 14, alignItems: 'center', marginBottom: 20 }}>
-        <div style={{
-          width: 52, height: 52, borderRadius: 12, flexShrink: 0,
-          background: accent, color: fg,
-          display: 'flex', alignItems: 'center', justifyContent: 'center',
-          fontFamily: 'var(--f-display)', fontSize: 26,
-        }}>{group.avatarInitial}</div>
+        <div
+          style={{
+            width: 52,
+            height: 52,
+            borderRadius: 12,
+            flexShrink: 0,
+            background: accent,
+            color: fg,
+            display: 'flex',
+            alignItems: 'center',
+            justifyContent: 'center',
+            fontFamily: 'var(--f-display)',
+            fontSize: 26,
+          }}
+        >
+          {avatarInitial}
+        </div>
+
         <div>
-          <h2 style={{ fontFamily: 'var(--f-display)', fontSize: 32, lineHeight: .88, margin: '0 0 4px', textTransform: 'uppercase' }}>{group.name}</h2>
+          <h2
+            style={{
+              fontFamily: 'var(--f-display)',
+              fontSize: 32,
+              lineHeight: 0.88,
+              margin: '0 0 4px',
+              textTransform: 'uppercase',
+            }}
+          >
+            {group.name || 'Grupo sin nombre'}
+          </h2>
+
           <div className="gc-row gc-gap-sm">
-            <span className="gc-mono" style={{ fontSize: 10, opacity: .55, letterSpacing: '.1em' }}>{group.code}</span>
-            <span style={{
-              padding: '2px 8px', borderRadius: 999,
-              fontSize: 9, fontFamily: 'var(--f-sub)', fontWeight: 800,
-              background: accent, color: fg, letterSpacing: '.07em', textTransform: 'uppercase',
-            }}>{group.type}</span>
+            <span
+              className="gc-mono"
+              style={{
+                fontSize: 10,
+                opacity: 0.55,
+                letterSpacing: '.1em',
+              }}
+            >
+              {group.code || 'SIN-CODIGO'}
+            </span>
+
+            <span
+              style={{
+                padding: '2px 8px',
+                borderRadius: 999,
+                fontSize: 9,
+                fontFamily: 'var(--f-sub)',
+                fontWeight: 800,
+                background: accent,
+                color: fg,
+                letterSpacing: '.07em',
+                textTransform: 'uppercase',
+              }}
+            >
+              {type}
+            </span>
+
             {group.yourRole === 'admin' && (
-              <span style={{ fontSize: 9, fontFamily: 'var(--f-mono)', color: 'var(--muted)', letterSpacing: '.08em' }}>ADMIN</span>
+              <span
+                style={{
+                  fontSize: 9,
+                  fontFamily: 'var(--f-mono)',
+                  color: 'var(--muted)',
+                  letterSpacing: '.08em',
+                }}
+              >
+                ADMIN
+              </span>
             )}
           </div>
         </div>
       </div>
 
       {group.description && (
-        <p style={{ fontSize: 13, color: 'var(--ink-2)', margin: '0 0 20px', lineHeight: 1.55 }}>{group.description}</p>
+        <p
+          style={{
+            fontSize: 13,
+            color: 'var(--ink-2)',
+            margin: '0 0 20px',
+            lineHeight: 1.55,
+          }}
+        >
+          {group.description}
+        </p>
       )}
 
-      {/* Tabs */}
       <div className="gc-tabs" style={{ marginBottom: 18 }}>
-        {[{ id: 'members', label: 'MIEMBROS' }, { id: 'activity', label: 'ACTIVIDAD' }].map(t => (
-          <button key={t.id} className={tab === t.id ? 'is-on' : ''} onClick={() => setTab(t.id)}>{t.label}</button>
+        {[
+          { id: 'members', label: 'MIEMBROS' },
+          { id: 'activity', label: 'ACTIVIDAD' },
+        ].map(t => (
+          <button
+            key={t.id}
+            className={tab === t.id ? 'is-on' : ''}
+            onClick={() => setTab(t.id)}
+          >
+            {t.label}
+          </button>
         ))}
       </div>
 
-      {/* Members tab */}
       {tab === 'members' && (
         <div style={{ display: 'grid', gap: 8 }}>
-          {sortedMembers.map((m, i) => (
-            <div key={m.id} style={{
-              display: 'grid', gridTemplateColumns: 'auto auto 1fr auto',
-              gap: 12, alignItems: 'center',
-              padding: '10px 14px', borderRadius: 10,
-              background: m.isYou ? 'var(--paper-2)' : 'transparent',
-              border: m.isYou ? '1px solid var(--rule)' : '1px solid transparent',
-            }}>
-              <span style={{
-                fontFamily: 'var(--f-display)', fontSize: 20, lineHeight: 1, minWidth: 28, textAlign: 'center',
-                color: i === 0 ? 'var(--gold)' : i < 3 ? 'var(--ink)' : 'var(--muted)',
-              }}>#{i + 1}</span>
-              <div style={{
-                width: 32, height: 32, borderRadius: 999,
-                background: m.isYou ? 'var(--gold)' : 'var(--ink)',
-                color: m.isYou ? 'var(--gold-ink)' : 'var(--paper)',
-                display: 'flex', alignItems: 'center', justifyContent: 'center',
-                fontFamily: 'var(--f-sub)', fontWeight: 800, fontSize: 12,
-              }}>{m.avatar}</div>
-              <div>
-                <span style={{ fontWeight: 600, fontSize: 13 }}>{m.name}</span>
-                {m.isYou && (
-                  <span style={{ marginLeft: 8, fontSize: 9, color: 'var(--gold)', fontFamily: 'var(--f-mono)', letterSpacing: '.08em' }}>TÚ</span>
-                )}
-              </div>
-              <div style={{ fontFamily: 'var(--f-display)', fontSize: 22, lineHeight: 1, textAlign: 'right' }}>
-                {m.pts}<span className="gc-mono" style={{ fontSize: 10, opacity: .45, marginLeft: 3 }}>pts</span>
-              </div>
+          {sortedMembers.length === 0 ? (
+            <div style={{ padding: 24, textAlign: 'center' }}>
+              <Eyebrow>SIN MIEMBROS</Eyebrow>
+              <p style={{ fontSize: 13, color: 'var(--ink-2)', marginTop: 8 }}>
+                Todavía no hay miembros registrados para este grupo.
+              </p>
             </div>
-          ))}
+          ) : (
+            sortedMembers.map((m, i) => (
+              <div
+                key={m.id || m.email || i}
+                style={{
+                  display: 'grid',
+                  gridTemplateColumns: 'auto auto 1fr auto',
+                  gap: 12,
+                  alignItems: 'center',
+                  padding: '10px 14px',
+                  borderRadius: 10,
+                  background: m.isYou ? 'var(--paper-2)' : 'transparent',
+                  border: m.isYou ? '1px solid var(--rule)' : '1px solid transparent',
+                }}
+              >
+                <span
+                  style={{
+                    fontFamily: 'var(--f-display)',
+                    fontSize: 20,
+                    lineHeight: 1,
+                    minWidth: 28,
+                    textAlign: 'center',
+                    color: i === 0 ? 'var(--gold)' : i < 3 ? 'var(--ink)' : 'var(--muted)',
+                  }}
+                >
+                  #{i + 1}
+                </span>
+
+                <div
+                  style={{
+                    width: 32,
+                    height: 32,
+                    borderRadius: 999,
+                    background: m.isYou ? 'var(--gold)' : 'var(--ink)',
+                    color: m.isYou ? 'var(--gold-ink)' : 'var(--paper)',
+                    display: 'flex',
+                    alignItems: 'center',
+                    justifyContent: 'center',
+                    fontFamily: 'var(--f-sub)',
+                    fontWeight: 800,
+                    fontSize: 12,
+                  }}
+                >
+                  {m.avatar || m.avatarInitial || m.name?.[0]?.toUpperCase() || m.email?.[0]?.toUpperCase() || '?'}
+                </div>
+
+                <div>
+                  <span style={{ fontWeight: 600, fontSize: 13 }}>
+                    {m.name || m.email || 'Miembro'}
+                  </span>
+
+                  {m.isYou && (
+                    <span
+                      style={{
+                        marginLeft: 8,
+                        fontSize: 9,
+                        color: 'var(--gold)',
+                        fontFamily: 'var(--f-mono)',
+                        letterSpacing: '.08em',
+                      }}
+                    >
+                      TÚ
+                    </span>
+                  )}
+                </div>
+
+                <div
+                  style={{
+                    fontFamily: 'var(--f-display)',
+                    fontSize: 22,
+                    lineHeight: 1,
+                    textAlign: 'right',
+                  }}
+                >
+                  {Number(m.pts ?? 0)}
+                  <span
+                    className="gc-mono"
+                    style={{ fontSize: 10, opacity: 0.45, marginLeft: 3 }}
+                  >
+                    pts
+                  </span>
+                </div>
+              </div>
+            ))
+          )}
         </div>
       )}
 
-      {/* Activity tab */}
       {tab === 'activity' && (
         <div style={{ display: 'grid', gap: 12 }}>
           {activity.length === 0 ? (
-            <p style={{ fontSize: 13, color: 'var(--muted)', textAlign: 'center', padding: '24px 0' }}>Sin actividad reciente.</p>
-          ) : activity.map(a => (
-            <div key={a.id} style={{ display: 'grid', gridTemplateColumns: '36px 1fr', gap: 12, alignItems: 'flex-start' }}>
-              <div style={{
-                width: 36, height: 36, borderRadius: 999, background: 'var(--paper-2)', flexShrink: 0,
-                display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 16,
-              }}>{actIcons[a.type] || '·'}</div>
-              <div>
-                <span style={{ fontWeight: 600, fontSize: 13 }}>{a.user}</span>
-                <span style={{ fontSize: 13, color: 'var(--ink-2)', marginLeft: 6 }}>{a.text}</span>
-                <div className="gc-mono" style={{ fontSize: 10, opacity: .45, marginTop: 3 }}>{a.time} atrás</div>
+            <p
+              style={{
+                fontSize: 13,
+                color: 'var(--muted)',
+                textAlign: 'center',
+                padding: '24px 0',
+              }}
+            >
+              Sin actividad reciente.
+            </p>
+          ) : (
+            activity.map(a => (
+              <div
+                key={a.id}
+                style={{
+                  display: 'grid',
+                  gridTemplateColumns: '36px 1fr',
+                  gap: 12,
+                  alignItems: 'flex-start',
+                }}
+              >
+                <div
+                  style={{
+                    width: 36,
+                    height: 36,
+                    borderRadius: 999,
+                    background: 'var(--paper-2)',
+                    flexShrink: 0,
+                    display: 'flex',
+                    alignItems: 'center',
+                    justifyContent: 'center',
+                    fontSize: 16,
+                  }}
+                >
+                  {actIcons[a.type] || '·'}
+                </div>
+
+                <div>
+                  <span style={{ fontWeight: 600, fontSize: 13 }}>
+                    {a.user || 'Usuario'}
+                  </span>
+
+                  <span
+                    style={{
+                      fontSize: 13,
+                      color: 'var(--ink-2)',
+                      marginLeft: 6,
+                    }}
+                  >
+                    {a.text || 'registró actividad.'}
+                  </span>
+
+                  <div
+                    className="gc-mono"
+                    style={{
+                      fontSize: 10,
+                      opacity: 0.45,
+                      marginTop: 3,
+                    }}
+                  >
+                    {a.time || 'hace poco'} atrás
+                  </div>
+                </div>
               </div>
-            </div>
-          ))}
+            ))
+          )}
         </div>
       )}
 
-      {/* Footer */}
-      <div className="gc-row" style={{ justifyContent: 'space-between', alignItems: 'center', marginTop: 24, paddingTop: 16, borderTop: '1px solid var(--rule)' }}>
-        <span className="gc-mono" style={{ fontSize: 10, opacity: .45, letterSpacing: '.1em' }}>
-          📍 {group.city} · {group.members} MIEMBROS
+      <div
+        className="gc-row"
+        style={{
+          justifyContent: 'space-between',
+          alignItems: 'center',
+          marginTop: 24,
+          paddingTop: 16,
+          borderTop: '1px solid var(--rule)',
+        }}
+      >
+        <span
+          className="gc-mono"
+          style={{
+            fontSize: 10,
+            opacity: 0.45,
+            letterSpacing: '.1em',
+          }}
+        >
+          📍 {group.city || 'Sin ciudad'} · {membersCount} MIEMBROS
         </span>
+
         <div className="gc-row gc-gap-sm">
-          <Btn kind="ghost" onClick={copyCode} style={{ padding: '8px 16px', fontSize: 11 }}>
+          <Btn
+            kind="ghost"
+            onClick={copyCode}
+            style={{ padding: '8px 16px', fontSize: 11 }}
+          >
             {copied ? '✓ Copiado' : 'Copiar código'}
           </Btn>
         </div>
@@ -539,21 +962,60 @@ function JoinGroupModal({ onClose, onJoined }) {
 
 // ─── GroupsPage ───────────────────────────────────────────────────────────────
 export default function GroupsPage() {
-  const { groups }          = useGroups()
-  const { groups: discover } = useDiscoverGroups()
-  const [selected,     setSelected]     = useState(null)
-  const [showCreate,   setShowCreate]   = useState(false)
-  const [showJoin,     setShowJoin]     = useState(false)
+  const [refreshKey, setRefreshKey] = useState(0)
 
-  const totalMembers = groups.reduce((s, g) => s + g.members, 0)
-  const totalTickets = groups.reduce((s, g) => s + g.sharedTickets, 0)
-  const totalPreds   = groups.reduce((s, g) => s + g.activePredictions, 0)
+  const { groups } = useGroups(refreshKey)
+  const { groups: discover } = useDiscoverGroups(refreshKey)
+
+  const [selected, setSelected] = useState(null)
+  const [showCreate, setShowCreate] = useState(false)
+  const [showJoin, setShowJoin] = useState(false)
+
+  function refreshGroups() {
+    setRefreshKey(k => k + 1)
+  }
+
+  const totalMembers = groups.reduce(
+    (s, g) => s + Number(g.members ?? g.memberCount ?? 0),
+    0
+  )
+
+  const totalTickets = groups.reduce(
+    (s, g) => s + Number(g.sharedTickets ?? 0),
+    0
+  )
+
+  const totalPreds = groups.reduce(
+    (s, g) => s + Number(g.activePredictions ?? 0),
+    0
+  )
 
   return (
     <PageShell>
-      {selected    && <GroupDetailModal  group={selected} onClose={() => setSelected(null)} />}
-      {showCreate  && <CreateGroupModal  onClose={() => setShowCreate(false)} onCreated={() => {}} />}
-      {showJoin    && <JoinGroupModal    onClose={() => setShowJoin(false)}   onJoined={() => {}} />}
+      {selected && (
+        <GroupDetailModal
+          group={selected}
+          onClose={() => setSelected(null)}
+        />
+      )}
+
+      {showCreate && (
+        <CreateGroupModal
+          onClose={() => setShowCreate(false)}
+          onCreated={() => {
+            refreshGroups()
+          }}
+        />
+      )}
+
+      {showJoin && (
+        <JoinGroupModal
+          onClose={() => setShowJoin(false)}
+          onJoined={() => {
+            refreshGroups()
+          }}
+        />
+      )}
 
       <PageHeader
         kicker={`${groups.length} GRUPOS · ${totalMembers} MIEMBROS · ${totalTickets} ENTRADAS COMPARTIDAS`}

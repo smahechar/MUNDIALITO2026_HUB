@@ -1,48 +1,155 @@
-import { useState, useEffect } from 'react'
+import { useEffect, useState } from 'react'
 import { matchesService } from '@/services/matches.service'
 
-export function useMatches(filters = {}) {
+const EMPTY_DETAIL = {
+  events: [],
+  stats: null,
+  lineupHome: null,
+  lineupAway: null,
+  h2h: [],
+  predictions: null,
+  attendance: null,
+}
+
+export function useMatches() {
   const [matches, setMatches] = useState([])
   const [isLoading, setIsLoading] = useState(true)
   const [error, setError] = useState(null)
 
   useEffect(() => {
-    setIsLoading(true)
-    matchesService.getAll(filters)
-      .then(setMatches)
-      .catch(setError)
-      .finally(() => setIsLoading(false))
-  }, [filters.status, filters.group])
+    let alive = true
 
-  return { matches, isLoading, error }
+    async function loadMatches() {
+      try {
+        setIsLoading(true)
+        setError(null)
+
+        const data = await matchesService.getAll()
+
+        if (!alive) return
+
+        setMatches(Array.isArray(data) ? data : [])
+      } catch (err) {
+        console.error('Error cargando partidos:', err)
+
+        if (!alive) return
+
+        setError(err)
+        setMatches([])
+      } finally {
+        if (alive) setIsLoading(false)
+      }
+    }
+
+    loadMatches()
+
+    return () => {
+      alive = false
+    }
+  }, [])
+
+  return {
+    matches,
+    allMatches: matches,
+    isLoading,
+    error,
+  }
 }
 
-export function useMatch(matchId) {
+export function useMatch(id) {
   const [match, setMatch] = useState(null)
   const [isLoading, setIsLoading] = useState(true)
+  const [error, setError] = useState(null)
 
   useEffect(() => {
-    if (!matchId) return
-    matchesService.getById(matchId).then(setMatch).finally(() => setIsLoading(false))
-  }, [matchId])
+    let alive = true
 
-  return { match, isLoading }
+    async function loadMatch() {
+      try {
+        setIsLoading(true)
+        setError(null)
+
+        const data = await matchesService.getById(id)
+
+        if (!alive) return
+
+        setMatch(data || null)
+      } catch (err) {
+        console.error('Error cargando partido:', err)
+
+        if (!alive) return
+
+        setError(err)
+        setMatch(null)
+      } finally {
+        if (alive) setIsLoading(false)
+      }
+    }
+
+    if (id) {
+      loadMatch()
+    } else {
+      setMatch(null)
+      setIsLoading(false)
+    }
+
+    return () => {
+      alive = false
+    }
+  }, [id])
+
+  return {
+    match,
+    isLoading,
+    error,
+  }
 }
 
-export function useLiveMatches() {
-  const [matches, setMatches] = useState([])
-  useEffect(() => { matchesService.getLive().then(setMatches) }, [])
-  return matches
-}
-
-export function useMatchDetail(matchId) {
-  const [detail, setDetail]     = useState(null)
+export function useMatchDetail(id) {
+  const [detail, setDetail] = useState(EMPTY_DETAIL)
   const [isLoading, setIsLoading] = useState(true)
+  const [error, setError] = useState(null)
 
   useEffect(() => {
-    if (!matchId) return
-    matchesService.getDetail(matchId).then(setDetail).finally(() => setIsLoading(false))
-  }, [matchId])
+    let alive = true
 
-  return { detail, isLoading }
+    async function loadDetail() {
+      try {
+        setIsLoading(true)
+        setError(null)
+
+        const data = await matchesService.getDetail(id)
+
+        if (!alive) return
+
+        setDetail(data || EMPTY_DETAIL)
+      } catch (err) {
+        console.error('Error cargando detalle del partido:', err)
+
+        if (!alive) return
+
+        setError(err)
+        setDetail(EMPTY_DETAIL)
+      } finally {
+        if (alive) setIsLoading(false)
+      }
+    }
+
+    if (id) {
+      loadDetail()
+    } else {
+      setDetail(EMPTY_DETAIL)
+      setIsLoading(false)
+    }
+
+    return () => {
+      alive = false
+    }
+  }, [id])
+
+  return {
+    detail,
+    isLoading,
+    error,
+  }
 }

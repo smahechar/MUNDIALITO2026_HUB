@@ -114,7 +114,7 @@ function SummaryTab({ match, detail = {}, home, away, onTab }) {
     <div className="gc-col gc-gap-md">
 
       {/* key events strip (live/final) */}
-      {!isUpcoming && detail.events?.length > 0 && (
+      {!isUpcoming && Array.isArray(detail.events) && detail.events.length > 0 && (
         <div className="gc-card" style={{ padding: 0, overflow: 'hidden' }}>
           <div className="gc-row" style={{ padding: '14px 22px', borderBottom: '1px solid var(--rule)', justifyContent: 'space-between', alignItems: 'center' }}>
             <Eyebrow>↘ MOMENTUM · KEY EVENTS</Eyebrow>
@@ -128,7 +128,7 @@ function SummaryTab({ match, detail = {}, home, away, onTab }) {
               }}>
                 <div className="gc-row gc-gap-sm" style={{ alignItems: 'center' }}>
                   <span style={{ fontFamily: 'var(--f-display)', fontSize: 20 }}>{e.minute}</span>
-                  <Flag code={e.team === 'home' ? safeHomeome.code : safeAway.code} size={16} />
+                  <Flag code={e.team === 'home' ? safeHome.code : safeAway.code} size={16} />
                   <span className="gc-mono" style={{ fontSize: 10, color: 'var(--muted)', letterSpacing: '.08em', textTransform: 'uppercase' }}>GOAL</span>
                 </div>
                 <span style={{ fontWeight: 700, fontSize: 13, marginTop: 4 }}>{e.player}</span>
@@ -267,11 +267,38 @@ export default function MatchDetailPage() {
       <MatchTabs tabs={TABS} active={tab} onSelect={setTab} />
 
       <div style={{ padding: '36px 56px 0' }}>
-        {tab === 'summary'  && <SummaryTab match={match} detail={detail} home={home} away={away} onTab={setTab} />}
-        {tab === 'timeline' && <MatchTimeline events={detail?.events || []} homeCode={safeHome.code} awayCode={safeAway.code} />}
-        {tab === 'stats'    && <MatchStats stats={detail?.stats} />}
-        {tab === 'lineups'  && <MatchLineups home={detail?.lineupHome} away={detail?.lineupAway} homeNation={home} awayNation={away} />}
-        {tab === 'venue'    && (
+        {tab === 'summary' && (
+          <SummaryTab
+            match={match}
+            detail={detail}
+            home={home}
+            away={away}
+            onTab={setTab}
+          />
+        )}
+
+        {tab === 'timeline' && (
+          <MatchTimeline
+            events={detail?.events || []}
+            homeCode={home.code}
+            awayCode={away.code}
+          />
+        )}
+
+        {tab === 'stats' && (
+          <MatchStats stats={detail?.stats} />
+        )}
+
+        {tab === 'lineups' && (
+          <MatchLineups
+            home={detail?.lineupHome}
+            away={detail?.lineupAway}
+            homeNation={home}
+            awayNation={away}
+          />
+        )}
+
+        {tab === 'venue' && (
           <StadiumCard
             name={match.stadium}
             city={match.city}

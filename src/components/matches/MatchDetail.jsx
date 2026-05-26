@@ -1,14 +1,13 @@
 import { useState, useEffect } from 'react'
 import { Flag, Pill, Eyebrow, Btn } from '@/components/shared/atoms'
 import { Floodlight, Watermark } from '@/components/shared/Layout'
-import { byCode } from '@/mocks/data/nations'
-import { stadiums } from '@/mocks/data/matches'
+
 
 
 function getTeam(code, fallbackName) {
   const safeCode = String(code ?? '').trim().toUpperCase()
 
-  return byCode?.[safeCode] ?? {
+  return {
     code: safeCode || 'TBD',
     name: fallbackName || safeCode || 'Por definir',
   }
@@ -18,16 +17,14 @@ function upper(value, fallback = '—') {
 }
 
 function getSafeStadium(match) {
-  const info = stadiums?.[match?.stadium]
-
   return {
     name: match?.stadium || 'Estadio por definir',
     city: match?.city || 'Ciudad por definir',
-    country: info?.country || '',
-    cap: info?.cap || null,
-    roof: info?.roof || 'Open roof',
-    surface: info?.surface || 'Natural',
-    opened: info?.opened || '—',
+    country: match?.country || '',
+    cap: match?.capacity || match?.cap || null,
+    roof: match?.roof || 'Dato no disponible',
+    surface: match?.surface || 'Dato no disponible',
+    opened: match?.opened || '—',
   }
 }
 // ─── Countdown ────────────────────────────────────────────────────────────────
@@ -271,50 +268,130 @@ export function MatchTimeline({ events, homeCode, awayCode }) {
 }
 
 // ─── MatchStats ──────────────────────────────────────────────────────────────
-export function MatchStats({ stats }) {
-  if (!stats) {
+export function MatchStats({ stats = {} }) {
+  const rows = [
+    { label: 'POSESIÓN', key: 'possession', pct: true },
+    { label: 'TIROS', key: 'shots', pct: false },
+    { label: 'TIROS AL ARCO', key: 'shotsOnTarget', pct: false },
+    { label: 'PASES', key: 'passes', pct: false },
+    { label: 'PRECISIÓN DE PASE', key: 'passAccuracy', pct: true },
+    { label: 'FALTAS', key: 'fouls', pct: false },
+    { label: 'TARJETAS AMARILLAS', key: 'yellowCards', pct: false },
+    { label: 'TARJETAS ROJAS', key: 'redCards', pct: false },
+    { label: 'CÓRNERS', key: 'corners', pct: false },
+    { label: 'FUERA DE LUGAR', key: 'offsides', pct: false },
+  ]
+
+  function getPair(value) {
+    if (Array.isArray(value)) {
+      return [Number(value[0] ?? 0), Number(value[1] ?? 0)]
+    }
+
+    if (value && typeof value === 'object') {
+      return [
+        Number(value.home ?? value.h ?? value.local ?? 0),
+        Number(value.away ?? value.a ?? value.visitante ?? 0),
+      ]
+    }
+
+    return [0, 0]
+  }
+
+  const hasAnyStats = rows.some((row) => {
+    const [homeValue, awayValue] = getPair(stats?.[row.key])
+    return homeValue > 0 || awayValue > 0
+  })
+
+  if (!hasAnyStats) {
     return (
-      <div className="gc-card" style={{ padding: 40, textAlign: 'center' }}>
-        <Eyebrow>STATS PENDING</Eyebrow>
-        <h3 style={{ fontFamily: 'var(--f-display)', fontSize: 42, margin: '10px 0 8px', lineHeight: .9 }}>
-          Live stats start at kickoff
+      <div className="gc-card" style={{ padding: 28 }}>
+        <Eyebrow>ESTADÍSTICAS</Eyebrow>
+        <h3
+          style={{
+            fontFamily: 'var(--f-display)',
+            fontSize: 42,
+            margin: '10px 0 8px',
+            lineHeight: 0.9,
+          }}
+        >
+          Sin estadísticas todavía.
         </h3>
+        <p style={{ fontSize: 13, color: 'var(--ink-2)' }}>
+          Las estadísticas aparecerán cuando el partido tenga datos registrados.
+        </p>
       </div>
     )
   }
 
-  const rows = [
-    { l: 'Posesión',          k: 'possession',    pct: true  },
-    { l: 'Tiros',             k: 'shots',         pct: false },
-    { l: 'Tiros al arco',     k: 'shotsOnTarget', pct: false },
-    { l: 'Pases',             k: 'passes',        pct: false },
-    { l: '% Pases',           k: 'passAccuracy',  pct: true  },
-    { l: 'Tiros de esquina',  k: 'corners',       pct: false },
-    { l: 'Faltas',            k: 'fouls',         pct: false },
-    { l: 'Fueras de lugar',   k: 'offsides',      pct: false },
-  ]
-
   return (
     <div className="gc-card" style={{ padding: 28 }}>
-      <Eyebrow>STAT COMPARISON · BROADCAST GRAPH</Eyebrow>
-      <div className="gc-col gc-gap-md" style={{ marginTop: 18 }}>
-        {rows.map(r => {
-          const [h, a] = stats[r.k]
-          const total  = r.pct ? 100 : h + a
-          const hPct   = total > 0 ? (h / total) * 100 : 50
+      <Eyebrow>ESTADÍSTICAS DEL PARTIDO</Eyebrow>
+
+      <div className="gc-col gc-gap-md" style={{ marginTop: 22 }}>
+        {rows.map((row) => {
+          const [homeValue, awayValue] = getPair(stats?.[row.key])
+
+          const total = row.pct ? 100 : homeValue + awayValue
+          const homePct = total > 0 ? (homeValue / total) * 100 : 50
+          const awayPct = 100 - homePct
+
           return (
-            <div key={r.k}>
-              <div className="gc-row" style={{ justifyContent: 'space-between', marginBottom: 6, alignItems: 'baseline' }}>
-                <span style={{ fontFamily: 'var(--f-display)', fontSize: 28, lineHeight: 1 }}>{h}{r.pct && '%'}</span>
-                <span className="gc-mono" style={{ fontSize: 11, color: 'var(--muted)', letterSpacing: '.1em', textTransform: 'uppercase' }}>{r.l}</span>
-                <span style={{ fontFamily: 'var(--f-display)', fontSize: 28, lineHeight: 1 }}>{a}{r.pct && '%'}</span>
+            <div key={row.key}>
+              <div
+                className="gc-row"
+                style={{
+                  justifyContent: 'space-between',
+                  alignItems: 'baseline',
+                  marginBottom: 8,
+                }}
+              >
+                <span
+                  style={{
+                    fontFamily: 'var(--f-display)',
+                    fontSize: 30,
+                    lineHeight: 1,
+                  }}
+                >
+                  {homeValue}
+                  {row.pct ? '%' : ''}
+                </span>
+
+                <span
+                  className="gc-mono"
+                  style={{
+                    fontSize: 11,
+                    color: 'var(--muted)',
+                    letterSpacing: '.1em',
+                  }}
+                >
+                  {row.label}
+                </span>
+
+                <span
+                  style={{
+                    fontFamily: 'var(--f-display)',
+                    fontSize: 30,
+                    lineHeight: 1,
+                  }}
+                >
+                  {awayValue}
+                  {row.pct ? '%' : ''}
+                </span>
               </div>
-              <div style={{
-                display: 'grid', gridTemplateColumns: `${hPct}% ${100 - hPct}%`,
-                height: 8, background: 'var(--paper-2)', borderRadius: 999, overflow: 'hidden', gap: 2,
-              }}>
-                <div style={{ background: 'var(--ink)', borderRadius: '999px 0 0 999px' }} />
-                <div style={{ background: 'var(--red)', borderRadius: '0 999px 999px 0' }} />
+
+              <div
+                style={{
+                  display: 'grid',
+                  gridTemplateColumns: `${homePct}% ${awayPct}%`,
+                  height: 8,
+                  background: 'var(--paper-2)',
+                  borderRadius: 999,
+                  overflow: 'hidden',
+                  gap: 2,
+                }}
+              >
+                <div style={{ background: 'var(--ink)' }} />
+                <div style={{ background: 'var(--red)' }} />
               </div>
             </div>
           )
@@ -325,58 +402,129 @@ export function MatchStats({ stats }) {
 }
 
 // ─── MatchLineups ─────────────────────────────────────────────────────────────
-function LineupCard({ team, nation, side }) {
-  const safeNation = nation ?? { code: 'TBD', name: 'Por definir' }
+function LineupCard({ team = {}, nation, side }) {
+  const safeNation = nation ?? {
+    code: 'TBD',
+    name: 'Por definir',
+  }
+
+  const players = Array.isArray(team?.eleven)
+    ? team.eleven
+    : Array.isArray(team?.players)
+      ? team.players
+      : Array.isArray(team?.lineup)
+        ? team.lineup
+        : []
+
+  const manager = team?.manager || 'DT por definir'
+  const formation = team?.formation || 'Formación por definir'
+
   return (
     <div className="gc-card" style={{ padding: 24 }}>
       <div className="gc-row" style={{ justifyContent: 'space-between', marginBottom: 18, alignItems: 'center' }}>
         <div className="gc-row gc-gap-sm" style={{ alignItems: 'center' }}>
           <Flag code={safeNation.code} size={28} />
           <div className="gc-col">
-            <span style={{ fontFamily: 'var(--f-display)', fontSize: 26, textTransform: 'uppercase', lineHeight: 1 }}>{safeNation.name}</span>
-            <span className="gc-mono" style={{ fontSize: 11, color: 'var(--muted)', letterSpacing: '.08em' }}>{team.manager} · {team.formation}</span>
+            <span style={{ fontFamily: 'var(--f-display)', fontSize: 26, textTransform: 'uppercase', lineHeight: 1 }}>
+              {safeNation.name}
+            </span>
+            <span className="gc-mono" style={{ fontSize: 11, color: 'var(--muted)', letterSpacing: '.08em' }}>
+              {manager} · {formation}
+            </span>
           </div>
         </div>
-        <Pill tone={side === 'home' ? 'ink' : 'default'}>{side === 'home' ? 'HOME' : 'AWAY'}</Pill>
+
+        <Pill tone={side === 'home' ? 'ink' : 'default'}>
+          {side === 'home' ? 'HOME' : 'AWAY'}
+        </Pill>
       </div>
-      <div className="gc-col gc-gap-xs">
-        {team.eleven.map(p => (
-          <div key={p.num} className="gc-row" style={{ padding: '8px 0', borderBottom: '1px solid var(--rule)', alignItems: 'center' }}>
-            <span className="gc-mono" style={{
-              width: 30, color: p.pos === 'GK' ? 'var(--gold)' : 'var(--muted)',
-              fontWeight: 800, fontSize: 13, letterSpacing: '.05em',
-            }}>{String(p.num).padStart(2, '0')}</span>
-            <span className="gc-grow" style={{ fontWeight: 600, fontSize: 14 }}>{p.name}</span>
-            <span className="gc-mono" style={{ fontSize: 10, color: 'var(--muted)', letterSpacing: '.1em', textTransform: 'uppercase' }}>{p.pos}</span>
-          </div>
-        ))}
-      </div>
+
+      {players.length === 0 ? (
+        <div style={{ padding: 20, textAlign: 'center', border: '1px solid var(--rule)', borderRadius: 12 }}>
+          <Eyebrow>ALINEACIÓN PENDIENTE</Eyebrow>
+          <p style={{ fontSize: 13, color: 'var(--ink-2)', marginBottom: 0 }}>
+            Todavía no hay jugadores registrados para esta selección.
+          </p>
+        </div>
+      ) : (
+        <div className="gc-col gc-gap-xs">
+          {players.map((p, index) => {
+            const number = p.num ?? p.number ?? index + 1
+            const name = p.name ?? p.player ?? 'Jugador por definir'
+            const pos = p.pos ?? p.position ?? '—'
+
+            return (
+              <div
+                key={`${number}-${name}-${index}`}
+                className="gc-row"
+                style={{
+                  padding: '8px 0',
+                  borderBottom: '1px solid var(--rule)',
+                  alignItems: 'center',
+                }}
+              >
+                <span
+                  className="gc-mono"
+                  style={{
+                    width: 30,
+                    color: pos === 'GK' ? 'var(--gold)' : 'var(--muted)',
+                    fontWeight: 800,
+                    fontSize: 13,
+                    letterSpacing: '.05em',
+                  }}
+                >
+                  {String(number).padStart(2, '0')}
+                </span>
+
+                <span className="gc-grow" style={{ fontWeight: 600, fontSize: 14 }}>
+                  {name}
+                </span>
+
+                <span
+                  className="gc-mono"
+                  style={{
+                    fontSize: 10,
+                    color: 'var(--muted)',
+                    letterSpacing: '.1em',
+                    textTransform: 'uppercase',
+                  }}
+                >
+                  {pos}
+                </span>
+              </div>
+            )
+          })}
+        </div>
+      )}
     </div>
   )
 }
 
 export function MatchLineups({ home, away, homeNation, awayNation }) {
-  if (!home || !away) {
+  const hasHome = Boolean(home)
+  const hasAway = Boolean(away)
+
+  if (!hasHome && !hasAway) {
     return (
       <div className="gc-card" style={{ padding: 40, textAlign: 'center' }}>
         <Eyebrow>LINEUPS PENDING</Eyebrow>
         <h3 style={{ fontFamily: 'var(--f-display)', fontSize: 42, margin: '10px 0 8px', lineHeight: .9 }}>
-          Alineaciones 1h antes del pitazo
+          Alineaciones pendientes.
         </h3>
         <p style={{ fontSize: 13, color: 'var(--ink-2)', maxWidth: 420, margin: '0 auto' }}>
-          Coaches confirm starting elevens roughly an hour before kickoff. We'll surface the XI plus formation here as soon as it's official.
+          Las alineaciones aparecerán cuando estén registradas en la base de datos.
         </p>
       </div>
     )
   }
+
   return (
     <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 20 }}>
-      <LineupCard team={home} nation={homeNation} side="home" />
-      <LineupCard team={away} nation={awayNation} side="away" />
+      <LineupCard team={home || {}} nation={homeNation} side="home" />
+      <LineupCard team={away || {}} nation={awayNation} side="away" />
     </div>
   )
 }
-
 // ─── StadiumCard ─────────────────────────────────────────────────────────────
 function StatBox({ label, value }) {
   return (
@@ -388,48 +536,56 @@ function StatBox({ label, value }) {
 }
 
 export function StadiumCard({ name, city, matchTime, attendance }) {
-  const info = stadiums?.[name] ?? {}
+  const safeName = name || 'Estadio por definir'
   const safeCity = city || 'Ciudad por definir'
+  const safeAttendance = attendance ?? null
+
   return (
-    <div className="gc-card" style={{ padding: 0, overflow: 'hidden' }}>
-      <div style={{ position: 'relative', aspectRatio: '16 / 8', background: 'var(--green)', color: 'var(--green-ink)' }}>
-        <svg viewBox="0 0 800 400" width="100%" height="100%" preserveAspectRatio="xMidYMid slice" style={{ position: 'absolute', inset: 0 }}>
-          <defs>
-            <radialGradient id="stad-flood" cx="50%" cy="0%" r="80%">
-              <stop offset="0%"  stopColor="#f4b500" stopOpacity=".5" />
-              <stop offset="55%" stopColor="#f4b500" stopOpacity="0" />
-            </radialGradient>
-          </defs>
-          <rect width="800" height="400" fill="url(#stad-flood)" />
-          <rect x="60"  y="80"  width="680" height="260" fill="none" stroke="rgba(247,241,223,.45)" strokeWidth="2" />
-          <line x1="400" y1="80"  x2="400" y2="340" stroke="rgba(247,241,223,.4)" strokeWidth="2" />
-          <circle cx="400" cy="210" r="44" fill="none" stroke="rgba(247,241,223,.4)" strokeWidth="2" />
-          <circle cx="400" cy="210" r="3"  fill="rgba(247,241,223,.6)" />
-          <rect x="60"  y="155" width="60"  height="110" fill="none" stroke="rgba(247,241,223,.4)" strokeWidth="2" />
-          <rect x="680" y="155" width="60"  height="110" fill="none" stroke="rgba(247,241,223,.4)" strokeWidth="2" />
-          <rect x="60"  y="185" width="20"  height="50"  fill="none" stroke="rgba(247,241,223,.4)" strokeWidth="2" />
-          <rect x="720" y="185" width="20"  height="50"  fill="none" stroke="rgba(247,241,223,.4)" strokeWidth="2" />
-          {Array.from({ length: 100 }).map((_, i) => (
-            <circle key={i} cx={20 + (i * 7) % 760} cy={20 + ((i * 11) % 50)} r="1.4" fill="rgba(247,241,223,0.45)" />
-          ))}
-        </svg>
-        <div style={{ position: 'absolute', inset: 0, padding: 22, display: 'flex', flexDirection: 'column', justifyContent: 'space-between' }}>
-          <div className="gc-row gc-gap-sm">
-            <Pill tone="gold">{info?.roof || 'Open roof'}</Pill>
-            <Pill style={{ background: 'rgba(247,241,223,.15)', borderColor: 'transparent', color: 'var(--green-ink)' }}>{info?.surface || 'Natural'}</Pill>
-          </div>
-          <div>
-            <Eyebrow tone="onGreen">↘ HOST VENUE</Eyebrow>
-            <h3 style={{ fontFamily: 'var(--f-display)', fontSize: 44, margin: '6px 0 4px', lineHeight: .9, textTransform: 'uppercase', color: 'var(--green-ink)' }}>{name}</h3>
-            <span className="gc-mono" style={{ fontSize: 12, opacity: .8, letterSpacing: '.1em' }}>const info = stadiums?.[name] ?? {}const safeCity = city || 'Ciudad por definir'</span>
-          </div>
+    <div className="gc-card" style={{ padding: 28 }}>
+      <Eyebrow>SEDE DEL PARTIDO</Eyebrow>
+
+      <h3
+        style={{
+          fontFamily: 'var(--f-display)',
+          fontSize: 42,
+          margin: '10px 0 8px',
+          lineHeight: 0.9,
+          textTransform: 'uppercase',
+        }}
+      >
+        {safeName}
+      </h3>
+
+      <p style={{ fontSize: 14, color: 'var(--ink-2)', marginTop: 0 }}>
+        {safeCity}
+      </p>
+
+      <div
+        style={{
+          display: 'grid',
+          gridTemplateColumns: 'repeat(auto-fit, minmax(140px, 1fr))',
+          gap: 12,
+          marginTop: 22,
+        }}
+      >
+        <div className="gc-card" style={{ padding: 16 }}>
+          <Eyebrow>HORARIO</Eyebrow>
+          <strong>{matchTime || 'Por definir'}</strong>
         </div>
-      </div>
-      <div style={{ padding: 22, display: 'grid', gridTemplateColumns: 'repeat(4, 1fr)', gap: 16 }}>
-        <StatBox label="CAPACIDAD"  value={info?.cap?.toLocaleString() || '—'} />
-        <StatBox label="ABRIÓ"      value={info?.opened || '—'} />
-        <StatBox label="KICKOFF"    value={matchTime || '—'} />
-        <StatBox label="ASISTENCIA" value={attendance || 'Pendiente'} />
+
+        <div className="gc-card" style={{ padding: 16 }}>
+          <Eyebrow>ASISTENCIA</Eyebrow>
+          <strong>
+            {safeAttendance !== null
+              ? Number(safeAttendance).toLocaleString()
+              : 'No registrada'}
+          </strong>
+        </div>
+
+        <div className="gc-card" style={{ padding: 16 }}>
+          <Eyebrow>PAÍS / CIUDAD</Eyebrow>
+          <strong>{safeCity}</strong>
+        </div>
       </div>
     </div>
   )
